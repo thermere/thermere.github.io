@@ -6,32 +6,32 @@
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}img{max-width:100%}</style>
 <title>Malimar Ballroom</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<meta name="description" content="Ten AI seats argue your legal and financial questions out loud. AI role-play for general information, not legal, tax or investment advice.">
+<meta name="description" content="Twenty AI seats argue your legal, financial and civic questions out loud. AI role-play for general information, not legal, tax or investment advice.">
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#e9ede7">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111916">
 <meta property="og:title" content="Malimar Ballroom">
-<meta property="og:description" content="Ten AI seats argue your legal and financial questions out loud. AI role-play, not advice.">
+<meta property="og:description" content="Twenty AI seats argue your legal, financial and civic questions out loud. AI role-play, not advice.">
 <meta property="og:type" content="website">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='12' fill='%2380611a'/%3E%3Ctext x='50' y='70' font-size='62' text-anchor='middle' fill='%23f7f8f3' font-family='Georgia,serif' font-weight='bold'%3EM%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@400;600;700&family=Bodoni+Moda:opsz,wght@6..96,500;6..96,700&family=Courier+Prime:wght@400;700&display=swap">
 <style>
-/* Layout: a hearing room. Ten nameplates on the bench at left, the court reporter's numbered record at right. */
+/* Layout: a hearing room. Seat nameplates on the bench at left, the court reporter's numbered record at right. */
 :root {
   --bg: #e9ede7; --surface: #f7f8f3; --ink: #17231e; --muted: #56635c; --rule: #c4cdc5;
-  --legal: #8a2b2e; --fin: #1c6849; --chair: #80611a; --on-accent: #f7f8f3;
+  --legal: #8a2b2e; --fin: #1c6849; --chair: #80611a; --civic: #1d4e7e; --on-accent: #f7f8f3;
   --display: "Bodoni Moda", "Didot", Georgia, serif;
   --plate: "Archivo Narrow", "Arial Narrow", Arial, sans-serif;
   --record: "Courier Prime", "Courier New", Courier, monospace;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #111916; --surface: #19231f; --ink: #e6ebe4; --muted: #9ba99f; --rule: #2f3d37;
-  --legal: #e58f86; --fin: #72cea7; --chair: #dcb962; --on-accent: #111916; color-scheme: dark;
+  --legal: #e58f86; --fin: #72cea7; --chair: #dcb962; --civic: #8ab6e0; --on-accent: #111916; color-scheme: dark;
 } }
 :root[data-theme="dark"] {
   --bg: #111916; --surface: #19231f; --ink: #e6ebe4; --muted: #9ba99f; --rule: #2f3d37;
-  --legal: #e58f86; --fin: #72cea7; --chair: #dcb962; --on-accent: #111916; color-scheme: dark;
+  --legal: #e58f86; --fin: #72cea7; --chair: #dcb962; --civic: #8ab6e0; --on-accent: #111916; color-scheme: dark;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -65,6 +65,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .seat { --side: var(--legal); position: relative; display: flex; min-width: 0; background: var(--surface); border: 1px solid var(--rule); border-top: 3px solid var(--side); border-radius: 2px; }
 .seat[data-side="fin"], .key .fin { --side: var(--fin); }
 .seat[data-side="chair"], .key .chair { --side: var(--chair); }
+.seat[data-side="civic"], .key .civic { --side: var(--civic); }
 .key .legal { --side: var(--legal); }
 .seat-main { flex: 1; min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 8px; align-items: center; padding: 7px 4px 7px 8px; background: none; border: 0; text-align: left; }
 .num { grid-row: span 2; color: var(--side); font: 700 22px/1 var(--display); font-variant-numeric: tabular-nums; min-width: 1.3em; }
@@ -95,7 +96,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .entry { display: grid; grid-template-columns: 2.4em minmax(0, 1fr); gap: 0 8px; margin-bottom: 12px; counter-increment: line; }
 .entry::before { content: counter(line); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; border-right: 1px solid var(--rule); padding-right: 8px; }
 .who { display: block; font-weight: 700; letter-spacing: .03em; color: var(--side, var(--ink)); }
-.entry[data-side="legal"] { --side: var(--legal); } .entry[data-side="fin"] { --side: var(--fin); } .entry[data-side="chair"] { --side: var(--chair); }
+.entry[data-side="legal"] { --side: var(--legal); } .entry[data-side="fin"] { --side: var(--fin); } .entry[data-side="chair"] { --side: var(--chair); } .entry[data-side="civic"] { --side: var(--civic); }
 .say { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .entry.pending .said { color: var(--muted); font-style: italic; }
 .note { color: var(--legal); font-size: 13px; display: block; margin-top: 2px; }
@@ -150,7 +151,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
   <header class="top">
     <div class="brand">
       <h1>Malimar <span>Ballroom</span></h1>
-      <p>Ten AI seats that argue your legal and financial questions out loud.</p>
+      <p>Twenty AI seats that argue your legal, financial and civic questions out loud.</p>
     </div>
     <div class="tools">
       <button class="tool" id="voice" type="button" aria-pressed="true">Voices on</button>
@@ -166,10 +167,10 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
   </header>
 
   <main class="room">
-    <section class="bench" aria-label="The ten seats">
+    <section class="bench" aria-label="The seats">
       <div class="bench-head">
-        <span class="label" id="seatCount">10 of 10 in session</span>
-        <span class="key"><span><i class="chair"></i>Chair</span><span><i class="legal"></i>Legal</span><span><i class="fin"></i>Financial</span></span>
+        <span class="label" id="seatCount">20 of 20 in session</span>
+        <span class="key"><span><i class="chair"></i>Chair</span><span><i class="legal"></i>Legal</span><span><i class="fin"></i>Financial</span><span><i class="civic"></i>Civic</span></span>
       </div>
       <div class="seats" id="seats"></div>
       <details class="matter">
@@ -243,7 +244,17 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
     { id: "cfo", name: "The CFO", side: "fin", pitch: 1, rate: 1.04, brief: "Turns the problem into numbers: exposure, cash flow, reserves and budget impact." },
     { id: "tax", name: "Tax Strategist", side: "fin", pitch: 1.1, rate: .98, brief: "Explains tax treatment, entity choices, records to keep and questions for a CPA." },
     { id: "forensic", name: "Forensic Accountant", side: "fin", pitch: .9, rate: .97, brief: "Follows the paper trail. Tests invoices, ledgers and claims against the evidence." },
-    { id: "markets", name: "Market Analyst", side: "fin", pitch: 1.16, rate: 1.08, brief: "Explains market context, general risk and tradeoffs. Never tells anyone what to buy, sell or hold." }
+    { id: "markets", name: "Market Analyst", side: "fin", pitch: 1.16, rate: 1.08, brief: "Explains market context, general risk and tradeoffs. Never tells anyone what to buy, sell or hold." },
+    { id: "legislator", name: "The Legislator", side: "civic", pitch: .92, rate: 1, brief: "Explains how statutes and bills actually work: how to find the current text of a law, what a legislature can and cannot do, and how a proposal becomes law. A fictional career lawmaker, never a real one." },
+    { id: "parliamentarian", name: "The Parliamentarian", side: "civic", pitch: 1.02, rate: .94, brief: "Keeps procedure honest: how chambers, committees and public bodies actually make decisions, what rules of order require, and whether a step was taken properly." },
+    { id: "investigator", name: "The Investigator", side: "civic", pitch: .84, rate: .98, brief: "Thinks like a career federal investigator: what evidence would prove or disprove each claim, what records exist, and how investigations actually proceed. Fictional; never speaks for any real agency." },
+    { id: "progressive", name: "The Progressive", side: "civic", pitch: 1.12, rate: 1.04, brief: "Argues the reading grounded in equity, collective responsibility and protection from concentrated power. Steel-mans the position; never caricatures, never campaigns for a party or politician." },
+    { id: "conservative", name: "The Conservative", side: "civic", pitch: .88, rate: .94, brief: "Argues the reading grounded in liberty, limited government, markets and personal responsibility. Steel-mans the position; never caricatures, never campaigns for a party or politician." },
+    { id: "dispatcher", name: "The Dispatcher", side: "civic", pitch: 1.06, rate: 1.1, brief: "A fictional 911 dispatcher's mindset: life safety first, exact location, callback number, stay on the line. In any real emergency the only right answer is: hang up and call 911 now." },
+    { id: "hr", name: "The HR Director", side: "civic", pitch: 1.18, rate: 1, brief: "Hiring, discipline, leave, accommodations and workplace policy: what fair process looks like and which employment duties land on the employer." },
+    { id: "logistics", name: "The Logistics Chief", side: "civic", pitch: .96, rate: 1.06, brief: "Supply chains in practice: carriers, brokers, bills of lading, warehousing, routing, and the customs and paperwork side of moving goods." },
+    { id: "archivist", name: "The Fact-Checker", side: "civic", pitch: 1.08, rate: .92, brief: "One source of truth: insists on primary sources, separates what is known from what is assumed, and names exactly what would verify each claim." },
+    { id: "mediator", name: "The Mediator", side: "civic", pitch: 1.04, rate: 1.02, brief: "Finds the deal: interests under positions, options both sides can accept, and how to structure a negotiation that actually closes." }
   ];
 
   const SCENES = [
@@ -380,7 +391,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
       el.append(main, edit);
       box.append(el);
     });
-    $("seatCount").textContent = active().length + " of 10 in session";
+    $("seatCount").textContent = active().length + " of " + seats.length + " in session";
   }
   function setSeat(id, state) {
     if (state) seatState[id] = state; else delete seatState[id];
@@ -749,6 +760,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
       "- This is read aloud. Use plain spoken sentences with no markdown, lists or headings.\n" +
       "- Use 3 to 6 sentences, under 130 words.\n" +
       "- Think out loud in plain terms: name what you are assuming, what generally follows from it, and what the person should check before acting.\n" +
+      "- If the matter sounds like an emergency happening right now, the first words are: call 911 (or the local emergency number) before anything else.\n" +
       "- Start speaking at once. Do not write your own name or a label.\n" +
       "- Give general information, not licensed advice. Law and tax rules vary by place, so ask for the jurisdiction when it matters.\n" +
       "- Never invent statutes, cases, quotes, rates or figures. Say when you are unsure.\n" +
@@ -842,7 +854,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
     let picked = [];
     if (pool.length) {
       $("status").textContent = "The President is calling on seats";
-      try { picked = (await route(sample, question, pool, 2, 3)).map(seat); } catch (e) { if (e?.code === "cancelled") throw e; }
+      try { picked = (await route(sample, question, pool, 2, 4)).map(seat); } catch (e) { if (e?.code === "cancelled") throw e; }
       if (!picked.length) picked = pool.slice(0, 2);
     }
     return { steps: [...picked.map(s => step(s)), step(has("president"), "closing")].filter(Boolean) };
