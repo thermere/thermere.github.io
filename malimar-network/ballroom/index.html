@@ -206,7 +206,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
           <button class="tool" id="mic" type="button" hidden aria-pressed="false" title="Dictate your question. Uses the browser's speech service.">Dictate</button>
           <button class="send" id="send" type="submit">Send</button>
         </div>
-        <p class="fine" id="fine">AI role-play for general information. Not legal, tax or investment advice. Live seats use your own Claude account or your browser's on-device AI, and your record stays in this browser.</p>
+        <p class="fine" id="fine">AI role-play for general information. Not legal, tax or investment advice. Live seats answer through your own Claude account, your browser's on-device AI, your own local relay, or the project's hall relay; the hall sees your question text only to answer it and stores nothing, so leave out personal details. Your record stays in this browser.</p>
         <p class="fine credit">A <a href="https://github.com/thermere/malimar-ballroom" target="_blank" rel="noopener">Thermere LLC</a> project. Free and open source under MIT.</p>
       </form>
     </section>
@@ -641,6 +641,27 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
     })().catch(() => null);
   }
 
+  // Hall relay (see PROVIDERS.md and relay-cloud/): the project's own small
+  // relay, so the box sits even when the visitor has no model of their own.
+  // It speaks the same protocol as the local relay. Question text is sent
+  // only to be answered — the hall stores nothing — and the fine print says
+  // so before anyone types. Last in the chain: a visitor's own model, when
+  // present, is more private and costs the project nothing.
+  const HALL_RELAY_URL = "https://malimar-hall.summer-dew-3815.workers.dev";
+  function hallDetect() {
+    return (async () => {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 3000);
+      let res;
+      try { res = await fetch(HALL_RELAY_URL + "/health", { signal: ctl.signal }); }
+      catch { return null; }
+      finally { clearTimeout(timer); }
+      if (!res.ok) return null;
+      const info = await res.json().catch(() => null);
+      return info && info.relay === "malimar-hall" ? relaySample(HALL_RELAY_URL) : null;
+    })().catch(() => null);
+  }
+
   const providers = [
     {
       name: "claude-viewer",
@@ -656,6 +677,11 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
       name: "local-relay",
       detect: relayDetect,
       unavailable: "Or run the local relay from this repository (the relay folder) with your own key or a local model."
+    },
+    {
+      name: "hall-relay",
+      detect: hallDetect,
+      unavailable: "The hall relay, which answers for visitors with no model of their own, could not be reached just now."
     }
   ];
   async function* providerChain() {
