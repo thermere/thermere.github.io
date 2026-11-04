@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Malimar Network — Thermere LLC</title>
+<meta name="description" content="The Malimar Network: free, open software where AI seats argue hard questions out loud. Logistics hearings and a business network are next.">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#e9ede7">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111916">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@400;600;700&family=Bodoni+Moda:opsz,wght@6..96,500;6..96,700&display=swap">
+<style>
+:root {
+  --bg: #e9ede7; --surface: #f7f8f3; --ink: #17231e; --muted: #56635c; --rule: #c4cdc5;
+  --legal: #8a2b2e; --fin: #1c6849; --chair: #80611a;
+  --display: "Bodoni Moda", "Didot", Georgia, serif;
+  --plate: "Archivo Narrow", "Arial Narrow", Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #111916; --surface: #19231f; --ink: #e6ebe4; --muted: #9ba99f; --rule: #2f3d37;
+    --legal: #e58f86; --fin: #72cea7; --chair: #dcb962; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 var(--plate); }
+a { color: inherit; }
+.wrap { max-width: 980px; margin: 0 auto; padding: 0 20px; }
+header { padding: 40px 0 22px; }
+.crumb { font-size: 13px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; font-weight: 700; }
+h1 { margin: 6px 0 0; font: 700 clamp(32px, 5vw, 48px)/1 var(--display); letter-spacing: -.01em; }
+h1 span { color: var(--chair); font-weight: 500; }
+.tag { margin: 8px 0 0; color: var(--muted); max-width: 640px; }
+section { border-top: 1px solid var(--rule); padding: 24px 0; }
+h2 { margin: 0 0 4px; font: 700 24px/1.1 var(--display); }
+.label { font-size: 12px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+.frame-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 14px; margin: 14px 0 8px; }
+.frame-head .open { font-weight: 700; }
+.ballroom { width: 100%; height: 78vh; min-height: 520px; border: 1px solid var(--rule); border-radius: 3px; background: var(--surface); }
+.cols { display: grid; gap: 14px; grid-template-columns: 1fr; margin-top: 14px; }
+@media (min-width: 760px) { .cols { grid-template-columns: repeat(3, 1fr); } }
+.col { padding: 14px 16px; background: var(--surface); border: 1px solid var(--rule); border-radius: 3px; }
+.col.legal { border-top: 3px solid var(--legal); }
+.col.fin { border-top: 3px solid var(--fin); }
+.col.chair { border-top: 3px solid var(--chair); }
+.col b { display: block; font-size: 17px; }
+.col p { margin: 6px 0 0; color: var(--muted); font-size: 14.5px; }
+.card { display: block; margin-top: 14px; padding: 16px 18px; background: var(--surface); border: 1px solid var(--rule); border-top: 3px solid var(--chair); border-radius: 3px; text-decoration: none; }
+.card:hover { border-color: var(--ink); }
+.card b { font-size: 18px; }
+.card p { margin: 6px 0 0; color: var(--muted); }
+footer { border-top: 1px solid var(--rule); padding: 20px 0 40px; color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a class="crumb" href="/">Thermere LLC</a>
+    <h1>Malimar <span>Network</span></h1>
+    <p class="tag">Free, open software where AI seats argue hard questions out loud. Today it hears legal and financial matters. Next it learns to speak logistics — and one day it connects the businesses that move the world.</p>
+  </header>
+
+  <section>
+    <span class="label">Live now</span>
+    <h2>Malimar Ballroom</h2>
+    <div class="frame-head">
+      <span style="color: var(--muted)">Ten seats. One question. Every angle, out loud. Works in this frame.</span>
+      <a class="open" href="/malimar-network/ballroom/" target="_blank" rel="noopener">Open full page →</a>
+    </div>
+    <iframe class="ballroom" src="/malimar-network/ballroom/" title="Malimar Ballroom — ten AI seats argue your question out loud"></iframe>
+  </section>
+
+  <section>
+    <span class="label">Inside the box</span>
+    <h2>What the network runs on</h2>
+    <div class="cols">
+      <div class="col legal">
+        <b>The hearing</b>
+        <p>Prosecutor, Lawyer, Judge and specialists argue your matter from every side, then the President makes the call. General information, never advice.</p>
+      </div>
+      <div class="col fin">
+        <b>Runs anywhere</b>
+        <p>One file, no account on most modern browsers. Live seats run on your own device or your own key — your record never leaves your browser.</p>
+      </div>
+      <div class="col chair">
+        <b>Open to everyone</b>
+        <p>Free and open source under MIT. People and AI agents both contribute, and every change is tested in the open.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <span class="label">Make it better</span>
+    <h2>The Workshop</h2>
+    <p style="color: var(--muted); margin: 4px 0 0">The whole app is one readable file, and anyone can improve it — person or AI agent. Edit the real code, run your version instantly, and send back what works. When a change merges, it ships here for every visitor.</p>
+    <a class="card" href="/malimar-network/workshop/" style="border-top-color: var(--fin)">
+      <b>Open the Workshop</b>
+      <p>Edit Malimar Ballroom in your browser. No account, no setup — your first improvement is five minutes away.</p>
+    </a>
+  </section>
+
+  <footer>
+    <p>A Thermere LLC project · Malimar Ballroom is free and open source under the MIT License on <a href="https://github.com/thermere/malimar-ballroom">GitHub</a>.</p>
+  </footer>
+</div>
+</body>
+</html>

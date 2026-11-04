@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Workshop — Malimar Network</title>
+<meta name="description" content="Work on Malimar Ballroom right in your browser: edit the real code, run your version instantly, then send your improvement back so it ships on the site.">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#e9ede7">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111916">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@400;600;700&family=Bodoni+Moda:opsz,wght@6..96,500;6..96,700&family=Courier+Prime:wght@400;700&display=swap">
+<style>
+:root {
+  --bg: #e9ede7; --surface: #f7f8f3; --ink: #17231e; --muted: #56635c; --rule: #c4cdc5;
+  --legal: #8a2b2e; --fin: #1c6849; --chair: #80611a;
+  --display: "Bodoni Moda", "Didot", Georgia, serif;
+  --plate: "Archivo Narrow", "Arial Narrow", Arial, sans-serif;
+  --mono: "Courier Prime", "Courier New", Courier, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #111916; --surface: #19231f; --ink: #e6ebe4; --muted: #9ba99f; --rule: #2f3d37;
+    --legal: #e58f86; --fin: #72cea7; --chair: #dcb962; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 var(--plate); }
+a { color: inherit; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 20px; }
+header { padding: 32px 0 18px; }
+.crumb { font-size: 13px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; font-weight: 700; }
+h1 { margin: 6px 0 0; font: 700 clamp(30px, 4.5vw, 42px)/1 var(--display); }
+h1 span { color: var(--chair); font-weight: 500; }
+.tag { margin: 8px 0 0; color: var(--muted); max-width: 720px; }
+section { border-top: 1px solid var(--rule); padding: 22px 0; }
+h2 { margin: 0 0 4px; font: 700 22px/1.1 var(--display); }
+.label { font-size: 12px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0 10px; }
+button, .btn { min-height: 38px; padding: 7px 14px; background: transparent; color: inherit; border: 1px solid var(--rule); border-radius: 3px; font: inherit; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; }
+button:hover, .btn:hover { border-color: var(--ink); }
+button.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); font-weight: 700; }
+.status { color: var(--muted); font-size: 14px; }
+.workbench { display: grid; gap: 14px; grid-template-columns: 1fr; }
+@media (min-width: 960px) { .workbench { grid-template-columns: 1fr 1fr; } }
+textarea { width: 100%; height: 66vh; min-height: 420px; resize: vertical; padding: 12px; background: var(--surface); color: var(--ink); border: 1px solid var(--rule); border-radius: 3px; font: 13.5px/1.5 var(--mono); white-space: pre; overflow-wrap: normal; }
+.preview { width: 100%; height: 66vh; min-height: 420px; border: 1px solid var(--rule); border-radius: 3px; background: var(--surface); }
+.steps { margin: 12px 0 0; padding: 0; list-style: none; counter-reset: step; }
+.steps li { counter-increment: step; padding: 8px 0 8px 40px; position: relative; border-top: 1px dashed var(--rule); }
+.steps li::before { content: counter(step); position: absolute; left: 4px; top: 8px; font: 700 20px/1 var(--display); color: var(--chair); }
+.steps span { color: var(--muted); }
+footer { border-top: 1px solid var(--rule); padding: 20px 0 40px; color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a class="crumb" href="/malimar-network/">Malimar Network</a>
+    <h1>The <span>Workshop</span></h1>
+    <p class="tag">This is the real Malimar Ballroom code — the whole app is one file. Change it, run your version beside it, and when it is better, send it back so it ships here for everyone.</p>
+  </header>
+
+  <section>
+    <span class="label">Edit and run</span>
+    <h2>Your version, live</h2>
+    <div class="bar">
+      <button class="primary" id="run" type="button">Run my version</button>
+      <button id="restore" type="button">Restore original code</button>
+      <button id="download" type="button">Download my version</button>
+      <span class="status" id="status">Loading the original code…</span>
+    </div>
+    <div class="workbench">
+      <textarea id="editor" aria-label="Malimar Ballroom source code" spellcheck="false"></textarea>
+      <iframe class="preview" id="preview" title="Your version of Malimar Ballroom, running"></iframe>
+    </div>
+    <p class="status" style="margin-top:8px">Your edits stay in this browser. Nothing is uploaded, and the public app on this site does not change when you experiment here.</p>
+  </section>
+
+  <section>
+    <span class="label">Put it on the website</span>
+    <h2>How your improvement ships</h2>
+    <ol class="steps">
+      <li><b>Make it better here.</b><br><span>Good first moves: add an example hearing (find <b>SCENES</b> — every matter fictional, amounts must add up), sharpen a seat's brief in <b>DEFAULTS</b>, or polish the layout at the top of the file.</span></li>
+      <li><b>Download your version</b><br><span>and open a pull request on <a href="https://github.com/thermere/malimar-ballroom">GitHub</a>. The repo has test suites (<b>tests/</b>) and a guide (<b>HOW-IT-WORKS.md</b>); run the tests and say what you tested. AI agents are welcome contributors.</span></li>
+      <li><b>A maintainer reviews and merges.</b><br><span>Every change is reviewed by a person before it ships. When yours merges, the copy of the app on this website is updated — your code, live, for every visitor.</span></li>
+    </ol>
+  </section>
+
+  <footer>
+    <p>A Thermere LLC project · Malimar Ballroom is free and open source under the MIT License on <a href="https://github.com/thermere/malimar-ballroom">GitHub</a>.</p>
+  </footer>
+</div>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const SOURCE_URL = "/malimar-network/ballroom/index.html";
+  const KEY = "bl-workshop.source";
+  let original = null;
+
+  function setStatus(t) { $("status").textContent = t; }
+  function run() {
+    $("preview").srcdoc = $("editor").value;
+    setStatus("Running your version on the right. The original is untouched.");
+  }
+
+  async function load() {
+    try {
+      const res = await fetch(SOURCE_URL, { cache: "no-store" });
+      original = await res.text();
+      const saved = localStorage.getItem(KEY);
+      $("editor").value = saved || original;
+      $("preview").src = SOURCE_URL;
+      setStatus(saved ? "Picked up your saved draft. Run it, or restore the original." : "Original code loaded. Edit it, then run your version.");
+    } catch {
+      setStatus("Could not load the app source here. Open the full page and view source instead.");
+    }
+  }
+
+  $("run").onclick = run;
+  $("restore").onclick = () => {
+    if (!original) return;
+    $("editor").value = original;
+    localStorage.removeItem(KEY);
+    $("preview").src = SOURCE_URL;
+    setStatus("Back to the original code.");
+  };
+  $("download").onclick = () => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([$("editor").value], { type: "text/html" }));
+    a.download = "index.html";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    setStatus("Downloaded. Open a pull request on GitHub with this file as the new index.html.");
+  };
+  $("editor").addEventListener("input", () => {
+    try { localStorage.setItem(KEY, $("editor").value); } catch {}
+  });
+  load();
+})();
+</script>
+</body>
+</html>
