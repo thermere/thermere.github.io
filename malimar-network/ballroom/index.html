@@ -91,6 +91,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; padding: 8px 14px; border-bottom: 1px solid var(--rule); color: var(--muted); }
 .scenes { display: flex; flex-wrap: wrap; gap: 6px; }
 .record { flex: 1; min-height: 46vh; overflow-y: auto; padding: 14px; font: 15px/1.6 var(--record); counter-reset: line; }
+.record .empty { color: var(--muted); font-style: italic; padding: 10px 6px; max-width: 56ch; }
 .entry { display: grid; grid-template-columns: 2.4em minmax(0, 1fr); gap: 0 8px; margin-bottom: 12px; counter-increment: line; }
 .entry::before { content: counter(line); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; border-right: 1px solid var(--rule); padding-right: 8px; }
 .who { display: block; font-weight: 700; letter-spacing: .03em; color: var(--side, var(--ink)); }
@@ -321,7 +322,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
   const seat = id => seats.find(s => s.id === id);
   const active = () => seats.filter(s => s.on);
 
-  let record = store.get("record", null) || example();
+  let record = store.get("record", null) || [];
   let claudeOff = false;
   let mode = store.get("mode", "floor");
   let voiceOn = store.get("voice", true);
@@ -397,7 +398,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
     $("modeHearing").setAttribute("aria-pressed", String(mode === "hearing"));
     renderChip();
   }
-  function setMode(m) { mode = m; store.set("mode", m); renderMode(); }
+  function setMode(m) { mode = m; store.set("mode", m); renderMode(); renderRecord(); }
 
   // Record
   const isExample = () => record.length === 0 || record.every(e => e.example);
@@ -427,6 +428,14 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
   function renderRecord() {
     const box = $("record");
     box.textContent = "";
+    if (!record.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = mode === "hearing"
+        ? "The record is empty. State your matter below and the box sits in order: the chair opens, counsel and challenge trade, witnesses weigh in, the judge reads it, and the chair gives the call."
+        : "The record is empty. Put your question below and the President calls on the seats best placed to answer, then gives the call.";
+      box.append(empty);
+    }
     record.forEach(e => box.append(makeEntry(e)));
     box.scrollTop = box.scrollHeight;
     const ex = isExample();
@@ -439,6 +448,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
     const el = makeEntry(e);
     if (pending) el.classList.add("pending");
     const box = $("record");
+    box.querySelector(".empty")?.remove();
     box.append(el);
     box.scrollTop = box.scrollHeight;
     return el;
@@ -684,8 +694,10 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
     return [...new Set(ids.map(String))].filter(id => pool.some(s => s.id === id)).slice(0, max);
   }
 
-  function seatPrompt(s, closing) {
-    const roleNote = s.id === "president" && closing
+  function seatPrompt(s, role) {
+    const roleNote = role === "opening" && s.id === "president"
+      ? "You open the hearing. Frame the matter before the box in plain terms and say what the seats will weigh. Do not give the call yet."
+      : role === "closing" && s.id === "president"
       ? "You speak last. Reconcile the seats and give the call plus up to three next steps."
       : "Answer from your seat's angle. Respond to earlier speakers and disagree when warranted.";
     return "You are voicing one seat in Malimar Ballroom, an AI role-play panel that discusses legal and financial questions.\n\n" +
@@ -702,7 +714,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
       "<matter_notes>\n" + matter() + "\n</matter_notes>\n\n<record>\n" + transcript() + "\n</record>\n\nSpeak now as " + s.name + ".";
   }
 
-  async function seatSpeaks(sample, s, closing) {
+  async function seatSpeaks(sample, s, role) {
     if (stopped) return false;
     const entry = { seat: s.id, text: "" };
     const el = addEntry(entry, true);
@@ -719,7 +731,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
       if (m) { say(s, m[0]); spoken += m[0].length; }
     };
     try {
-      const { text, truncated } = await sample(seatPrompt(s, closing), {
+      const { text, truncated } = await sample(seatPrompt(s, role), {
         modelTier: $("pace").value, cache: false, signal: ctl.signal,
         onText: ({ text }) => {
           if (el.classList.contains("pending")) { el.classList.remove("pending"); setSeat(s.id, "speaking"); $("status").textContent = s.name + " is speaking"; }
@@ -758,19 +770,29 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
   }
 
   async function plan(sample, question) {
-    if (addressed) return { order: [seat(addressed)], closing: null };
+    if (addressed) return { steps: [{ s: seat(addressed), role: null }] };
     const on = active();
     const has = id => on.find(s => s.id === id);
+    const step = (s, role) => (s ? { s, role: role || null } : null);
     ctl = new AbortController();
     if (mode === "hearing") {
-      const core = ["prosecutor", "lawyer"].map(has).filter(Boolean);
+      // Hearing order: chair opens, the client's counsel presents, the
+      // challenger attacks, expert witnesses weigh in, the judge reads it
+      // neutrally, and the chair closes with the call.
+      const core = ["lawyer", "prosecutor"].map(has).filter(Boolean);
       const pool = on.filter(s => !["prosecutor", "lawyer", "judge", "president"].includes(s.id));
       let mid = [];
       if (pool.length) {
         $("status").textContent = "Calling witnesses";
         try { mid = (await route(sample, question, pool, 1, 2)).map(seat); } catch (e) { if (e?.code === "cancelled") throw e; mid = pool.slice(0, 1); }
       }
-      return { order: [...core, ...mid, has("judge"), has("president")].filter(Boolean), closing: has("president") };
+      return { steps: [
+        step(has("president"), "opening"),
+        ...core.map(s => step(s)),
+        ...mid.map(s => step(s)),
+        step(has("judge")),
+        step(has("president"), "closing")
+      ].filter(Boolean) };
     }
     const pool = on.filter(s => s.id !== "president");
     let picked = [];
@@ -779,7 +801,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
       try { picked = (await route(sample, question, pool, 2, 3)).map(seat); } catch (e) { if (e?.code === "cancelled") throw e; }
       if (!picked.length) picked = pool.slice(0, 2);
     }
-    return { order: [...picked, has("president")].filter(Boolean), closing: has("president") };
+    return { steps: [...picked.map(s => step(s)), step(has("president"), "closing")].filter(Boolean) };
   }
 
   function setBusy(b) {
@@ -814,10 +836,10 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
     try {
       for (;;) {
         try {
-          const { order, closing } = await plan(sample, question);
-          if (!order.length) $("status").textContent = "No seats in session";
-          for (const s of order) {
-            if (!(await seatSpeaks(sample, s, s === closing)) || stopped) break;
+          const { steps } = await plan(sample, question);
+          if (!steps.length) $("status").textContent = "No seats in session";
+          for (const st of steps) {
+            if (!(await seatSpeaks(sample, st.s, st.role)) || stopped) break;
           }
           break;
         } catch (e) {
@@ -965,7 +987,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
     clearTimeout(clearArmed); clearArmed = null;
     b.textContent = "Clear record"; b.classList.remove("warn");
     stopAll(); setBusy(false);
-    record = example();
+    record = [];
     store.set("record", []);
     renderRecord();
   };
@@ -1030,7 +1052,6 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
 
   $("matter").value = store.get("matter", "");
   $("ask").value = store.get("draft", "");
-  if (!record.length) record = example();
   renderScenes(); renderSeats(); renderMode(); renderVoice(); renderRecord();
 })();
 </script>
