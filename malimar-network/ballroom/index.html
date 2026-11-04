@@ -692,6 +692,12 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
   }
   const providerIterator = providerChain();
   const samplePromise = providerIterator.next().then(r => (r.done ? null : r.value));
+  // The provider currently voicing the box. samplePromise only ever holds the
+  // FIRST one found; once a hearing has walked further down the chain, this
+  // binding is what later questions must use — otherwise every new question
+  // re-tries a provider that already failed and re-walks a spent chain.
+  let live = null;
+  const fineText = $("fine").textContent; // captured before liveOff ever rewrites it
   const downloadsPromise = window.claude?.use ? window.claude.use("downloads").catch(() => null) : Promise.resolve(null);
   function liveOff(message) {
     // Recess mode: live seats are unavailable, but the composer stays open —
@@ -898,9 +904,17 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
   }
 
   async function ask(question) {
-    let sample = await samplePromise;
     if (busy) return;
-    if (!sample || claudeOff) { await recessReply(question); return; }
+    let sample = live || await samplePromise;
+    if (sample) live = sample;
+    if (!sample || claudeOff) {
+      // A past failure may have been transient — a hall redeploy, a network
+      // blip. Give the hall one fresh probe before sitting in recess, and
+      // come back to life if it answers.
+      const retry = await hallDetect().catch(() => null);
+      if (retry) { live = retry; sample = retry; claudeOff = false; $("fine").textContent = fineText; }
+      else { await recessReply(question); return; }
+    }
     if (isExample()) { record = []; renderRecord(); }
     stopped = false;
     setBusy(true);
@@ -924,6 +938,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
             const next = await providerIterator.next();
             if (!next.done) {
               sample = next.value;
+              live = sample;
               $("status").textContent = "That model could not start. Trying another provider";
               continue;
             }
