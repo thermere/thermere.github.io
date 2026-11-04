@@ -440,7 +440,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
     box.scrollTop = box.scrollHeight;
     const ex = isExample();
     $("banner").hidden = !ex;
-    $("starters").hidden = !ex || claudeOff;
+    $("starters").hidden = !ex;
   }
   function persist() { store.set("record", record.filter(e => !e.example && e.text)); }
   function addEntry(e, pending) {
@@ -578,11 +578,24 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
   function browserAIDetect() {
     const LM = window.LanguageModel || (window.ai && window.ai.languageModel);
     if (!LM) return null;
-    return (async () => {
+    const work = (async () => {
       const a = LM.availability ? await LM.availability() : (await LM.capabilities()).available;
       if (a === "unavailable" || a === "no") return null;
+      if (a !== "available" && a !== "readily") return browserAISample(LM); // model still downloading: probe on first use, with progress shown
+      // The API claims a model is on device. Prove it answers before enabling
+      // live seats: some shells expose LanguageModel but every prompt fails.
+      let probe;
+      try {
+        probe = await LM.create();
+        const reply = await probe.prompt("Reply with the single word: ready");
+        if (!reply || !reply.trim() || /not available|unavailable|not supported/i.test(reply)) return null;
+      } catch { return null; } finally {
+        try { probe?.destroy?.(); } catch {}
+      }
       return browserAISample(LM);
-    })().catch(() => null);
+    })();
+    // A shell that hangs instead of answering must not freeze the chain.
+    return Promise.race([work, new Promise(r => setTimeout(() => r(null), 20000))]).catch(() => null);
   }
 
   // Local relay (see PROVIDERS.md and relay/): a tiny program the visitor runs
@@ -655,12 +668,10 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
   const samplePromise = providerIterator.next().then(r => (r.done ? null : r.value));
   const downloadsPromise = window.claude?.use ? window.claude.use("downloads").catch(() => null) : Promise.resolve(null);
   function liveOff(message) {
+    // Recess mode: live seats are unavailable, but the composer stays open —
+    // the clerk answers questions on the record (see recessReply()).
     claudeOff = true;
-    $("starters").hidden = true;
-    $("ask").disabled = true;
-    $("send").disabled = true;
-    $("ask").placeholder = "Live seats are unavailable here";
-    $("fine").textContent = message + " The example hearings still play.";
+    $("fine").textContent = message + " The example hearings still play, and you can still put a question on the record.";
   }
   samplePromise.then(s => { if (!s) liveOff(providers.map(p => p.unavailable).join(" ")); });
 
@@ -810,7 +821,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
     send.textContent = b ? "Stop" : "Send";
     send.classList.toggle("stop", b);
     send.type = b ? "button" : "submit";
-    send.disabled = !b && claudeOff;
+    send.disabled = false;
     document.querySelectorAll("#scenes button").forEach(x => { x.disabled = b; });
     if (!b) $("status").textContent = "Ready";
   }
@@ -823,9 +834,46 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
     renderSeats();
   }
 
+  // Recess mode: no live model in this browser, but a question never falls
+  // into a dead box. The clerk (the President's nameplate) puts the question
+  // on the record, answers honestly, and points to the closest example
+  // hearing and to the ways to wake the box up live.
+  const RECESS_TIPS = [
+    [/irs|audit|tax return|tax letter/i, "IRS letter"],
+    [/partner|buyout|walking out|operating agreement/i, "Partner walking out"],
+    [/supplier|vendor|invoice|not delivering|shipment never/i, "Supplier dispute"],
+    [/inherit|estate|probate|will contest|executor/i, "Contested inheritance"],
+    [/food truck|foodtruck|restaurant|permit|catering/i, "Food truck funds"],
+    [/freight|carrier|broker|detention|load|trucking|shipper/i, "Freight bill fight"],
+    [/bookkeep|till|deposit|missing money|cash short|steal|theft|embezzl/i, "The short till"]
+  ];
+  async function recessReply(question) {
+    if (busy) return;
+    if (isExample()) { record = []; renderRecord(); }
+    stopped = false;
+    addEntry({ seat: null, text: question });
+    persist();
+    $("banner").hidden = false;
+    const s = seat("president") || seats[0];
+    const hit = RECESS_TIPS.find(([re]) => re.test(question));
+    const text = "The box is in recess in this browser: there is no model here to voice the seats, so I cannot take up your matter live. Your question is on the record, and the record stays in this browser. " +
+      (hit ? "The hearing closest to your matter is " + hit[1] + ". Press its button above to hear how the box works when it sits. " : "Press any example hearing above to hear how the box works when it sits. ") +
+      "For live seats, open this page in a current Chrome or Edge, in the Claude app, or with the small local relay from the project page.";
+    setSeat(s.id, "thinking");
+    $("status").textContent = s.name + " is speaking";
+    await new Promise(r => setTimeout(r, 800));
+    if (stopped) { setSeat(s.id, null); return; }
+    setSeat(s.id, null);
+    addEntry({ seat: s.id, text });
+    if (voiceOn && synth) say(s, text);
+    $("status").textContent = "Ready";
+    persist();
+  }
+
   async function ask(question) {
     let sample = await samplePromise;
-    if (!sample || claudeOff || busy) return;
+    if (busy) return;
+    if (!sample || claudeOff) { await recessReply(question); return; }
     if (isExample()) { record = []; renderRecord(); }
     stopped = false;
     setBusy(true);
@@ -857,7 +905,12 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
         }
       }
     } catch (e) {
-      if (e?.code !== "cancelled") addEntry({ seat: "president", text: "", note: failure(e) });
+      if (e?.code !== "cancelled") {
+        addEntry({ seat: "president", text: "I could not bring the box to order just now.", note: failure(e) });
+        // Never swallow the question: hand it back so it can be sent again.
+        $("ask").value = question;
+        store.set("draft", question);
+      }
     }
     setBusy(false);
     persist();
