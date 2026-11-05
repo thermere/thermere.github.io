@@ -109,6 +109,13 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .ops-output section { padding: 10px; border: 1px solid var(--rule); border-radius: 2px; }
 .ops-output h3 { margin: 0 0 5px; font-size: 16px; }
 .ops-output p { margin: 5px 0; overflow-wrap: anywhere; }
+#dispatchWorkspace label { display: grid; gap: 5px; min-width: 0; margin-block: 8px; }
+#dispatchWorkspace input, #dispatchWorkspace select { width: 100%; min-width: 0; padding: 7px; background: var(--bg); color: var(--ink); border: 1px solid var(--rule); }
+#dispatchWorkspace input[type="checkbox"] { width: auto; }
+#dispatchWorkspace .nav-consent { display: flex; align-items: start; }
+#dispatchEditor section { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,220px),1fr)); gap: 8px; }
+#dispatchEditor h3, #dispatchEditor button { grid-column: 1 / -1; }
+#dispatchOutput p { white-space: pre-wrap; }
 
 .desk { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--surface); border: 1px solid var(--rule); border-radius: 2px; }
 .desk-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 9px 14px; border-bottom: 1px solid var(--rule); }
@@ -226,6 +233,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
       <button class="tool" id="clockOpen" type="button">Time clock</button>
       <button class="tool" id="memoryOpen" type="button">Memory</button>
       <button class="tool" id="agentsOpen" type="button" aria-controls="agentWorkspace">Agent connections</button>
+      <button class="tool" id="dispatchOpen" type="button" aria-controls="dispatchWorkspace">Warehouse dispatch</button>
       <button class="tool" id="premiumShow" type="button">ElevenLabs setup</button>
       <button class="tool" id="voiceEngine" type="button" aria-controls="premiumWorkspace">Device voices</button>
       <label class="pace" for="pace">Pace
@@ -378,6 +386,21 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
         <div class="nav-actions"><button class="tool" id="memorySave" type="button">Save note</button><button class="tool" id="memoryNew" type="button">New note</button><button class="tool" id="memoryExport" type="button">Export memory</button></div>
         <p class="fine" id="memoryStatus" role="status">No automatic learning from AI answers. Review a response before keeping it.</p>
         <div id="memoryList" class="ops-output"></div>
+      </details>
+      <details class="operations" id="dispatchWorkspace">
+        <summary>Warehouse dispatch desk · plan, assign and handle exceptions</summary>
+        <p class="fine">Build a shift from supplied work, people and resources. Cross-dock, fulfillment and manufacturing profiles share an explainable scheduling engine. This local prototype proposes assignments and records your updates; no WMS, employee devices, drivers or intercom is connected.</p>
+        <label>Operation<select id="dispatchProfile"><option value="crossdock">Freight cross-dock / LTL terminal</option><option value="fulfillment">Distribution / fulfillment center</option><option value="manufacturing">Manufacturing warehouse</option></select></label>
+        <label>Current minute after shift start<input id="dispatchNow" type="number" min="0" max="1440" step="1" value="0"></label>
+        <p class="fine">All times are minutes after the same shift start: 0 is shift start, 60 is one hour later. Durations, skills, reservations and readiness are supplied estimates or reports, not independently verified conditions.</p>
+        <div class="nav-actions"><button class="tool" id="dispatchDemo" type="button">Load fictional shift</button><button class="tool" id="dispatchAddWorker" type="button">Add person</button><button class="tool" id="dispatchAddResource" type="button">Add resource</button><button class="tool" id="dispatchAddJob" type="button">Add work order</button></div>
+        <div id="dispatchEditor" class="ops-output"></div>
+        <div class="nav-actions"><button class="tool" id="dispatchPlan" type="button">Calculate assignments</button><button class="tool" id="dispatchApprove" type="button" disabled>Approve proposals locally</button><button class="tool" id="dispatchHandoff" type="button">Create shift handoff</button><button class="tool" id="dispatchDiscuss" type="button">Discuss selected shift with AI</button><button class="tool" id="dispatchExport" type="button">Export shift</button></div>
+        <label>Import a shift file<input id="dispatchImport" type="file" accept="application/json,.json"></label>
+        <label class="nav-consent fine"><input id="dispatchShare" type="checkbox">Share this shift's work orders, people aliases, resources, reported status and proposals with Ballroom's existing AI providers when I press Discuss. No automatic sharing.</label>
+        <p class="fine" id="dispatchStatus" role="status">Empty shift. Start a fictional example or add your own supplied work. Export to retain this workspace; new visits start empty.</p>
+        <div id="dispatchOutput" class="ops-output"></div>
+        <p class="fine">Planning references: <a href="https://www.onetonline.org/link/summary/43-5032.00" target="_blank" rel="noopener">dispatcher duties</a> · <a href="https://learn.microsoft.com/en-us/dynamics365/supply-chain/warehousing/wave-processing" target="_blank" rel="noopener">warehouse work and production waves</a>. A plan does not establish forklift competence, dock safety, legal driving availability, load securement or trailer weight distribution.</p>
       </details>
       <details class="operations" id="opsWorkspace">
         <summary>Operations planner · manager and warehouse workspace</summary>
@@ -2729,6 +2752,193 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
     try { rec.start(); navListening = true; $("navVoice").textContent = "Voice controls listening"; $("navVoice").setAttribute("aria-pressed", "true"); navigationMessage("Listening for commands prefixed with Ballroom. Say Ballroom, stop listening to finish."); }
     catch { stoppedListening(); navigationMessage("Voice input could not start. Another speech input may still be closing; try again."); }
   }
+  // Deterministic warehouse dispatch: supplied work and explicit local records.
+  // No AI instruction can release work or write a physical-system command.
+  const DISPATCH_PROFILES = {
+    crossdock: { name: "Freight cross-dock", kinds: ["unload", "sort", "crossdock", "stage", "load", "count"], focus: "Inbound-to-outbound connections, staging and departure cutoffs." },
+    fulfillment: { name: "Distribution / fulfillment", kinds: ["receive", "putaway", "replenish", "pick", "pack", "load", "count"], focus: "Reserved orders, replenishment before picking, packing and shipping cutoffs." },
+    manufacturing: { name: "Manufacturing warehouse", kinds: ["receive", "quality", "putaway", "line_supply", "return_material", "count"], focus: "Quality release, material availability and line-supply deadlines." }
+  };
+  let dispatchState = { schema: "malimar-dispatch-v1", profile: "crossdock", capturedAt: new Date().toISOString(), nowMinute: 0, workers: [], resources: [], jobs: [], events: [] }, dispatchRevision = 0, dispatchProposal = null;
+  function normalizeDispatch(value) {
+    if (!value || value.schema !== "malimar-dispatch-v1" || !Object.hasOwn(DISPATCH_PROFILES, value.profile)) throw new Error("Unsupported shift format or operation profile.");
+    const string = (x, max = 120) => typeof x === "string" ? x.trim().slice(0, max) : "";
+    const minute = (x, max = 1440) => { if (!Number.isInteger(x) || x < 0 || x > max) throw new Error("Times must be whole minutes from 0 to " + max + "."); return x; };
+    const list = (x, max) => { if (!Array.isArray(x) || x.length > max) throw new Error("A shift collection is missing or too large."); return x; };
+    const codes = x => list(x, 20).map(v => string(v, 60)).filter(Boolean);
+    const unique = rows => { if (rows.some(x => !/^[a-zA-Z0-9_-]{1,60}$/.test(x.id)) || new Set(rows.map(x => x.id)).size !== rows.length) throw new Error("Use unique IDs with letters, numbers, hyphens or underscores in each collection."); return rows; };
+    const window = x => { const from = minute(x.from), to = minute(x.to); if (to <= from) throw new Error("Availability must end after it starts."); return { from, to }; };
+    const workers = unique(list(value.workers, 50).map(x => { const w = { id: string(x.id, 60), skills: codes(x.skills), ready: x.ready === true, ...window(x), breakFrom: x.breakFrom === null ? null : minute(x.breakFrom), breakTo: x.breakTo === null ? null : minute(x.breakTo) }; if ((w.breakFrom === null) !== (w.breakTo === null) || w.breakFrom !== null && (w.breakFrom < w.from || w.breakTo > w.to || w.breakTo <= w.breakFrom)) throw new Error("A break must fit within availability, or both break fields must be empty."); return w; }));
+    const resources = unique(list(value.resources, 80).map(x => ({ id: string(x.id, 60), ready: x.ready === true, ...window(x) })));
+    const statuses = ["queued", "approved", "acknowledged", "in_progress", "blocked", "completed"];
+    const jobs = unique(list(value.jobs, 200).map(x => {
+      if (!statuses.includes(x.status)) throw new Error("Unknown work status.");
+      const j = { id: string(x.id, 60), label: string(x.label, 160), kind: string(x.kind, 30), from: string(x.from), to: string(x.to), minutes: minute(x.minutes, 480), ready: minute(x.ready), due: minute(x.due), priority: minute(x.priority, 5), skill: string(x.skill, 60), resources: codes(x.resources), after: codes(x.after), inventoryReserved: x.inventoryReserved === true, hold: string(x.hold, 300), status: x.status, occupied: x.occupied === true, worker: string(x.worker, 60), start: x.start === null ? null : minute(x.start), end: x.end === null ? null : minute(x.end), completedAt: x.completedAt === null ? null : minute(x.completedAt) };
+      if (!j.minutes || !j.priority || new Set(j.resources).size !== j.resources.length || new Set(j.after).size !== j.after.length) throw new Error("Work needs a positive duration and priority, with no duplicate resources/dependencies.");
+      if ((["approved", "acknowledged", "in_progress"].includes(j.status) || j.status === "blocked" && j.occupied) && (!workers.some(w => w.id === j.worker) || j.start === null || j.end === null || j.end <= j.start || j.resources.some(id => !resources.some(r => r.id === id)))) throw new Error("Existing assignments need a known person, resources and valid booking times.");
+      if (j.status === "completed" && j.completedAt === null) throw new Error("A completed work order needs its reported completion minute.");
+      return j;
+    }));
+    if (!Number.isFinite(Date.parse(value.capturedAt))) throw new Error("The snapshot needs its capture date.");
+    const events = list(value.events, 500).map(e => ({ at: string(e?.at, 40), text: string(e?.text, 400) }));
+    return { schema: "malimar-dispatch-v1", profile: value.profile, capturedAt: new Date(value.capturedAt).toISOString(), nowMinute: minute(value.nowMinute), workers, resources, jobs, events };
+  }
+  function dispatchWindows(worker) { return worker.breakFrom === null ? [[worker.from, worker.to]] : [[worker.from, worker.breakFrom], [worker.breakTo, worker.to]].filter(([a, b]) => b > a); }
+  function dispatchSlot(worker, resources, busyWindows, earliest, duration) {
+    for (const [a, b] of dispatchWindows(worker)) {
+      let start = Math.max(a, earliest, ...resources.map(r => r.from)), until = Math.min(b, ...resources.map(r => r.to), 1440);
+      const bookings = ["worker:" + worker.id, ...resources.map(r => "resource:" + r.id)].flatMap(id => busyWindows.get(id) || []);
+      for (let attempt = 0; attempt <= bookings.length; attempt++) {
+        const end = start + duration; if (end > until) break;
+        const overlaps = bookings.filter(([x, y]) => start < y && end > x);
+        if (!overlaps.length) return { start, end };
+        start = Math.max(...overlaps.map(x => x[1]));
+      }
+    }
+    return null;
+  }
+  function calculateDispatch(value) {
+    const data = normalizeDispatch(value), proposed = [], blocked = [], busyWindows = new Map(), finish = new Map(), failed = new Set();
+    const reserve = (id, start, end) => { const intervals = busyWindows.get(id) || []; intervals.push([start, end]); busyWindows.set(id, intervals); };
+    const assigned = data.jobs.filter(j => ["approved", "acknowledged", "in_progress"].includes(j.status) || j.status === "blocked" && j.occupied);
+    for (const j of data.jobs) {
+      if (j.status === "completed") finish.set(j.id, j.completedAt);
+      if (j.status === "blocked") failed.add(j.id);
+    }
+    const alerts = [];
+    for (const j of assigned) {
+      const overdue = j.status === "blocked" || j.end <= data.nowMinute || j.status !== "in_progress" && j.start < data.nowMinute;
+      const start = Math.max(data.nowMinute, j.start), end = overdue ? 1440 : j.end;
+      if (overdue) alerts.push(j.id + ": booking is overdue without reported completion; its person/resources remain unavailable until the assignment is reconciled.");
+      reserve("worker:" + j.worker, start, end); j.resources.forEach(id => reserve("resource:" + id, start, end)); finish.set(j.id, end);
+    }
+    let waiting = data.jobs.filter(j => j.status === "queued").sort((a, b) => a.due - b.due || a.priority - b.priority || a.id.localeCompare(b.id));
+    while (waiting.length) {
+      const later = []; let progress = false;
+      for (const j of waiting) {
+        const deny = reason => { blocked.push({ id: j.id, reason }); failed.add(j.id); progress = true; };
+        if (j.hold) { deny("Hold: " + j.hold); continue; }
+        if (!DISPATCH_PROFILES[data.profile].kinds.includes(j.kind)) { deny("Work type does not match this operation profile."); continue; }
+        if (!j.label || !j.from || !j.to || !j.skill || !j.resources.length || !j.inventoryReserved) { deny("Confirm description, source, destination, required site skill, resources and inventory/work reservation."); continue; }
+        if (j.after.some(id => !data.jobs.some(x => x.id === id) || failed.has(id))) { deny("A dependency is missing, blocked or could not be planned."); continue; }
+        if (j.after.some(id => !finish.has(id))) { later.push(j); continue; }
+        const resources = j.resources.map(id => data.resources.find(r => r.id === id));
+        if (resources.some(r => !r || !r.ready)) { deny("A required resource is missing or reported unavailable."); continue; }
+        const people = data.workers.filter(w => w.ready && w.skills.includes(j.skill));
+        if (!people.length) { deny("No available person has the supplied required skill: " + j.skill); continue; }
+        const earliest = Math.max(data.nowMinute, j.ready, ...j.after.map(id => finish.get(id)));
+        const options = people.map(w => ({ worker: w.id, slot: dispatchSlot(w, resources, busyWindows, earliest, j.minutes) })).filter(x => x.slot).sort((a, b) => a.slot.end - b.slot.end || a.worker.localeCompare(b.worker));
+        if (!options.length) { deny("No continuous slot fits person availability, breaks and shared-resource bookings."); continue; }
+        const chosen = options[0], conditional = j.after.filter(id => data.jobs.find(x => x.id === id)?.status !== "completed");
+        const row = { id: j.id, worker: chosen.worker, ...chosen.slot, lateMinutes: Math.max(0, chosen.slot.end - j.due), conditional, reason: "Earliest due time, then stated priority; earliest feasible finish among eligible people." };
+        proposed.push(row); finish.set(j.id, row.end); reserve("worker:" + row.worker, row.start, row.end); j.resources.forEach(id => reserve("resource:" + id, row.start, row.end)); progress = true;
+      }
+      if (!progress) { later.forEach(j => { blocked.push({ id: j.id, reason: "Dependency cycle or unresolved prerequisite; no assignment fabricated." }); failed.add(j.id); }); break; }
+      waiting = later;
+    }
+    return { proposed, blocked, alerts, plannedMinutes: proposed.reduce((sum, p) => sum + data.jobs.find(j => j.id === p.id).minutes, 0), lateCount: proposed.filter(p => p.lateMinutes > 0).length, input: JSON.stringify(data) };
+  }
+  function dispatchChanged(message = "Shift changed. Calculate a fresh proposal before approving assignments.") {
+    dispatchRevision++; dispatchProposal = null; $("dispatchApprove").disabled = true; $("dispatchStatus").textContent = message; renderDispatchOutput();
+  }
+  function dispatchRecord(text) { if (dispatchState.events.length >= 500) throw new Error("This shift has 500 audit events. Export it before starting a new shift."); dispatchState.events.push({ at: new Date().toISOString(), text: text.slice(0, 400) }); }
+  function dispatchExample(profile) {
+    const kinds = profile === "fulfillment" ? ["replenish", "pick", "pack"] : profile === "manufacturing" ? ["quality", "line_supply", "line_supply"] : ["unload", "crossdock", "load"];
+    const skills = profile === "fulfillment" ? ["forklift", "pick", "pack"] : profile === "manufacturing" ? ["quality", "forklift", "forklift"] : ["forklift", "forklift", "forklift"];
+    return { schema: "malimar-dispatch-v1", profile, capturedAt: new Date().toISOString(), nowMinute: 0,
+      workers: [{ id: "example-A", skills: ["forklift", "quality", "pick"], ready: true, from: 0, to: 480, breakFrom: 120, breakTo: 150 }, { id: "example-B", skills: ["forklift", "pack"], ready: true, from: 0, to: 480, breakFrom: 180, breakTo: 210 }],
+      resources: [{ id: "example-equipment", ready: true, from: 0, to: 480 }, { id: "example-destination", ready: true, from: 0, to: 480 }],
+      jobs: kinds.map((kind, i) => ({ id: "example-work-" + (i + 1), label: "Fictional " + kind.replace(/_/g, " ") + " work", kind, from: i ? "example-stage" : "example-receiving", to: i === 2 ? "example-destination" : "example-stage", minutes: 20 + i * 5, ready: 0, due: 60 + i * 30, priority: 2, skill: skills[i], resources: [i === 2 ? "example-destination" : "example-equipment"], after: i ? ["example-work-" + i] : [], inventoryReserved: true, hold: i === 2 && profile === "manufacturing" ? "Example quality hold: material release not supplied" : "", status: "queued", worker: "", start: null, end: null, completedAt: null })), events: [] };
+  }
+  function dispatchField(box, label, value, update, type = "text", disabled = false) {
+    const wrapper = docEl("label", label), input = docEl("input"); input.type = type; input.disabled = disabled; if (type === "checkbox") wrapper.className = "nav-consent";
+    if (type === "checkbox") input.checked = value === true; else { input.value = value === null ? "" : value; input.maxLength = 300; }
+    if (type === "number") { input.min = "0"; input.max = "1440"; input.step = "1"; }
+    input.onchange = () => { update(type === "checkbox" ? input.checked : type === "number" ? input.value === "" ? null : Number(input.value) : input.value); dispatchChanged(); };
+    wrapper.append(input); box.append(wrapper);
+  }
+  function renderDispatchEditor() {
+    const box = $("dispatchEditor"); box.textContent = "";
+    const csv = value => value.split(",").map(x => x.trim()).filter(Boolean);
+    for (const [key, title] of [["workers", "People · supplied skills and availability"], ["resources", "Resources · dock doors, equipment, stations or lines"], ["jobs", "Work orders · source and destination as reported"]]) {
+      const group = docEl("details"), summary = docEl("summary", title + " (" + dispatchState[key].length + ")"); group.append(summary);
+      for (const item of dispatchState[key]) {
+        const card = docEl("section"), locked = key === "jobs" && item.status !== "queued";
+        card.append(docEl("h3", item.id + (key === "jobs" ? " · " + item.status : "")));
+        dispatchField(card, "ID / alias", item.id, x => { item.id = x; }, "text", locked);
+        if (key === "workers") {
+          dispatchField(card, "Site skill codes, separated by commas", item.skills.join(", "), x => { item.skills = csv(x); });
+          dispatchField(card, "Reported available", item.ready, x => { item.ready = x; }, "checkbox");
+          for (const [name, label] of [["from", "Available from minute"], ["to", "Available until minute"], ["breakFrom", "Break starts (empty for none)"], ["breakTo", "Break ends (empty for none)"]]) dispatchField(card, label, item[name], x => { item[name] = x; }, "number");
+        } else if (key === "resources") {
+          dispatchField(card, "Reported ready for assigned use", item.ready, x => { item.ready = x; }, "checkbox");
+          dispatchField(card, "Available from minute", item.from, x => { item.from = x; }, "number"); dispatchField(card, "Available until minute", item.to, x => { item.to = x; }, "number");
+        } else {
+          for (const [name, label] of [["label", "Work description"], ["kind", "Work type: " + DISPATCH_PROFILES[dispatchState.profile].kinds.join(", ")], ["from", "Source / floor location"], ["to", "Destination / dock / line"], ["skill", "Required site skill"], ["hold", "Hold / exception reason"]]) dispatchField(card, label, item[name], x => { item[name] = x; }, "text", locked);
+          for (const [name, label] of [["minutes", "Estimated minutes"], ["ready", "Ready at minute"], ["due", "Due by minute"], ["priority", "Priority 1–5 (1 first when due times tie)"]]) dispatchField(card, label, item[name], x => { item[name] = x; }, "number", locked);
+          dispatchField(card, "Required resource IDs, separated by commas", item.resources.join(", "), x => { item.resources = csv(x); }, "text", locked);
+          dispatchField(card, "Preceding work IDs, separated by commas", item.after.join(", "), x => { item.after = csv(x); }, "text", locked);
+          dispatchField(card, "Inventory / work reservation confirmed by supplied record", item.inventoryReserved, x => { item.inventoryReserved = x; }, "checkbox", locked);
+        }
+        if (!locked) { const remove = docEl("button", "Remove from this local shift"); remove.type = "button"; remove.className = "tool"; remove.onclick = () => { dispatchState[key] = dispatchState[key].filter(x => x !== item); dispatchChanged(); renderDispatchEditor(); }; card.append(remove); }
+        group.append(card);
+      }
+      box.append(group);
+    }
+  }
+  function buildDispatchProposal() {
+    try { dispatchState = normalizeDispatch(dispatchState); dispatchProposal = { ...calculateDispatch(dispatchState), revision: dispatchRevision }; $("dispatchApprove").disabled = !dispatchProposal.proposed.length; $("dispatchStatus").textContent = dispatchProposal.proposed.length + " proposals, " + dispatchProposal.blocked.length + " blocked, " + dispatchProposal.lateCount + " estimated late. Review before local approval. No outside assignment was sent."; renderDispatchOutput(); }
+    catch (error) { dispatchProposal = null; $("dispatchApprove").disabled = true; $("dispatchStatus").textContent = error.message; }
+  }
+  function approveDispatchProposal() {
+    try {
+      if (!dispatchProposal || dispatchProposal.revision !== dispatchRevision || JSON.stringify(normalizeDispatch(dispatchState)) !== dispatchProposal.input) throw new Error("Inputs changed. Calculate a fresh proposal.");
+      dispatchRecord("Approved " + dispatchProposal.proposed.length + " proposed bookings locally. No WMS or employee delivery.");
+      for (const row of dispatchProposal.proposed) { const job = dispatchState.jobs.find(j => j.id === row.id); job.worker = row.worker; job.start = row.start; job.end = row.end; job.status = "approved"; }
+      dispatchChanged("Assignments approved in this local prototype. No employee, driver, WMS or intercom received them."); renderDispatchEditor();
+    } catch (error) { $("dispatchStatus").textContent = error.message; }
+  }
+  function updateDispatchJob(id, action) {
+    try {
+      const data = normalizeDispatch(dispatchState), job = data.jobs.find(j => j.id === id); if (!job) throw new Error("Unknown work order.");
+      if (data.events.length >= 500) throw new Error("Export this shift before recording more events.");
+      if (action === "acknowledged" && job.status === "approved") job.status = action;
+      else if (action === "in_progress" && job.status === "acknowledged") {
+        if (job.after.some(dep => data.jobs.find(j => j.id === dep)?.status !== "completed")) throw new Error("Preceding work has no reported completion.");
+        const worker = data.workers.find(w => w.id === job.worker), resources = job.resources.map(id => data.resources.find(r => r.id === id));
+        if (!worker?.ready || !worker.skills.includes(job.skill) || resources.some(r => !r?.ready) || job.hold || !job.inventoryReserved) throw new Error("Reconcile readiness, skill, reservation and holds before recording a start.");
+        if (data.nowMinute < job.start || !dispatchWindows(worker).some(([a, b]) => data.nowMinute >= a && data.nowMinute + job.minutes <= b) || resources.some(r => data.nowMinute < r.from || data.nowMinute + job.minutes > r.to)) throw new Error("This start does not fit the reported booking or continuous availability.");
+        if (data.jobs.some(other => other.id !== id && (["approved", "acknowledged", "in_progress"].includes(other.status) || other.status === "blocked" && other.occupied) && (other.worker === job.worker || other.resources.some(r => job.resources.includes(r))) && (other.status === "in_progress" || other.occupied || data.nowMinute < other.end && data.nowMinute + job.minutes > other.start))) throw new Error("A person or resource has conflicting booked or in-progress work. Reconcile it first.");
+        job.status = action; job.occupied = true; job.start = data.nowMinute; job.end = data.nowMinute + job.minutes;
+      } else if (action === "completed" && job.status === "in_progress") { if (data.nowMinute < job.start) throw new Error("Completion cannot precede the reported start."); job.status = action; job.occupied = false; job.completedAt = data.nowMinute; }
+      else if (action === "queued" && ["approved", "acknowledged", "blocked"].includes(job.status) && !job.occupied) { job.status = action; job.worker = ""; job.start = null; job.end = null; }
+      else if (action === "blocked" && ["approved", "acknowledged", "in_progress"].includes(job.status)) { job.occupied = job.status === "in_progress" || job.occupied; job.status = action; job.hold = "Local exception reported. Reconcile facts before clearing it."; }
+      else if (action === "clear_exception" && job.status === "blocked" && job.occupied) { job.status = "acknowledged"; job.hold = ""; }
+      else throw new Error("That transition is not available. In-progress work must be reconciled through a reported completion; do not silently reassign occupied resources.");
+      data.events.push({ at: new Date().toISOString(), text: id + ": " + action + " reported locally at shift minute " + data.nowMinute + ". Identity and physical conditions are not authenticated." }); dispatchState = data;
+      dispatchChanged("Recorded " + id + " as " + action + " locally. Recalculate to update the queue."); renderDispatchEditor();
+    } catch (error) { $("dispatchStatus").textContent = error.message; }
+  }
+  function renderDispatchOutput() {
+    const box = $("dispatchOutput"); box.textContent = ""; box.append(docEl("p", DISPATCH_PROFILES[dispatchState.profile].focus + " Snapshot captured " + dispatchState.capturedAt + ". Locations and readiness are supplied reports, not live sensors."));
+    const report = (heading, text) => { const section = docEl("section"); section.append(docEl("h3", heading), docEl("p", text)); box.append(section); return section; };
+    if (dispatchProposal) {
+      report("Proposal summary", dispatchProposal.proposed.length + " proposed · " + dispatchProposal.blocked.length + " blocked · " + dispatchProposal.plannedMinutes + " estimated work minutes · " + dispatchProposal.lateCount + " due-time misses. This greedy schedule is not a globally optimal or safety-certified plan.");
+      for (const row of dispatchProposal.proposed) { const job = dispatchState.jobs.find(j => j.id === row.id); report("Proposed · " + row.id, row.worker + " · minute " + row.start + "–" + row.end + " · " + job.from + " → " + job.to + (row.lateMinutes ? " · " + row.lateMinutes + " minutes late" : "") + (row.conditional.length ? " · conditional on completion: " + row.conditional.join(", ") : "") + ". " + row.reason); }
+      for (const row of dispatchProposal.blocked) report("Blocked · " + row.id, row.reason);
+      for (const alert of dispatchProposal.alerts) report("Reconcile assignment", alert);
+    }
+    for (const job of dispatchState.jobs.filter(j => j.status !== "queued")) {
+      const card = report(job.id + " · " + job.status, job.label + " · " + job.from + " → " + job.to + (job.worker ? " · " + job.worker + " · booked " + job.start + "–" + job.end : "") + (job.hold ? " · " + job.hold : ""));
+      const actions = job.status === "approved" ? [["acknowledged", "Record acknowledgement"], ["blocked", "Record exception"], ["queued", "Return to queue"]] : job.status === "acknowledged" ? [["in_progress", "Record start"], ["blocked", "Record exception"], ...(!job.occupied ? [["queued", "Return to queue"]] : [])] : job.status === "in_progress" ? [["completed", "Record completion"], ["blocked", "Record stop / exception"]] : job.status === "blocked" ? job.occupied ? [["clear_exception", "Record exception resolved; review before restart"]] : [["queued", "Requeue for editing"]] : [];
+      const bar = docEl("div"); bar.className = "nav-actions"; for (const [action, label] of actions) { const button = docEl("button", label); button.className = "tool"; button.type = "button"; button.onclick = () => updateDispatchJob(job.id, action); bar.append(button); } card.append(bar);
+    }
+    if (dispatchState.events.length) report("Local event history · last 20 of " + dispatchState.events.length, dispatchState.events.slice(-20).map(e => e.at + " · " + e.text).join("\n"));
+  }
+  function dispatchHandoffText() {
+    return ["LOCAL WAREHOUSE DISPATCH HANDOFF · REVIEW REQUIRED", DISPATCH_PROFILES[dispatchState.profile].name + " · snapshot captured " + dispatchState.capturedAt + " · current shift minute " + dispatchState.nowMinute, "Reported work only. No WMS, employee authentication, floor sensor or physical paging connection.", ...dispatchState.jobs.map(j => j.id + " | " + j.status + " | " + j.label + " | " + j.from + " -> " + j.to + " | " + (j.worker || "unassigned") + " | " + (j.start === null ? "not booked" : j.start + "-" + j.end) + (j.hold ? " | HOLD: " + j.hold : "")), ...(dispatchProposal?.blocked || []).map(j => "UNPLANNED " + j.id + ": " + j.reason), ...dispatchState.events.slice(-20).map(e => e.at + " " + e.text)].join("\n");
+  }
+
   // Outside agents get typed, visit-scoped actions, never an eval/DOM/key API.
   const AGENT_RELAY = "http://127.0.0.1:8716";
   const AGENT_GRANTS = { read: "agentGrantRead", contribute: "agentGrantContribute", panel: "agentGrantPanel", control: "agentGrantControl", draft: "agentGrantDraft" };
@@ -3067,6 +3277,20 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
   $("agentDisconnect").onclick = () => { void disconnectAgent(); };
   $("agentRun").onclick = () => { void runConnectedAgent(); };
   window.addEventListener("pagehide", () => { void disconnectAgent("Visit ended. Outside-agent permissions revoked."); });
+  $("dispatchOpen").onclick = () => { $("dispatchWorkspace").open = true; };
+  $("dispatchProfile").onchange = () => { dispatchState.profile = $("dispatchProfile").value; dispatchChanged(); renderDispatchEditor(); };
+  $("dispatchNow").onchange = () => { dispatchState.nowMinute = Number($("dispatchNow").value); dispatchChanged(); };
+  $("dispatchDemo").onclick = () => { if (dispatchState.jobs.length) { $("dispatchStatus").textContent = "Export your current shift and refresh for an empty workspace before loading a fictional shift."; return; } dispatchState = dispatchExample($("dispatchProfile").value || "crossdock"); dispatchChanged("Fictional shift loaded. Adjust inputs, then calculate assignments."); renderDispatchEditor(); };
+  $("dispatchAddWorker").onclick = () => { if (dispatchState.workers.length >= 50) return; dispatchState.workers.push({ id: "person-" + crypto.randomUUID().slice(0, 8), skills: [], ready: false, from: 0, to: 480, breakFrom: null, breakTo: null }); dispatchChanged(); renderDispatchEditor(); };
+  $("dispatchAddResource").onclick = () => { if (dispatchState.resources.length >= 80) return; dispatchState.resources.push({ id: "resource-" + crypto.randomUUID().slice(0, 8), ready: false, from: 0, to: 480 }); dispatchChanged(); renderDispatchEditor(); };
+  $("dispatchAddJob").onclick = () => { if (dispatchState.jobs.length >= 200) return; dispatchState.jobs.push({ id: "work-" + crypto.randomUUID().slice(0, 8), label: "", kind: DISPATCH_PROFILES[dispatchState.profile].kinds[0], from: "", to: "", minutes: 15, ready: 0, due: 60, priority: 3, skill: "", resources: [], after: [], inventoryReserved: false, hold: "", status: "queued", worker: "", start: null, end: null, completedAt: null }); dispatchChanged(); renderDispatchEditor(); };
+  $("dispatchPlan").onclick = buildDispatchProposal;
+  $("dispatchApprove").onclick = approveDispatchProposal;
+  $("dispatchExport").onclick = () => { try { downloadLocal("malimar-dispatch-shift.json", JSON.stringify(normalizeDispatch(dispatchState), null, 2), "application/json"); $("dispatchStatus").textContent = "Shift exported. This is a local reported record, not authenticated WMS activity."; } catch (error) { $("dispatchStatus").textContent = error.message; } };
+  $("dispatchImport").onchange = async () => { const file = $("dispatchImport").files?.[0]; if (!file) return; try { if (dispatchState.jobs.length) throw new Error("Export your current shift and refresh for an empty workspace before importing another shift."); if (file.size > 300000) throw new Error("Shift file exceeds 300 KB."); const data = normalizeDispatch(JSON.parse(await file.text())); dispatchState = data; $("dispatchProfile").value = data.profile; $("dispatchNow").value = data.nowMinute; dispatchChanged("Imported supplied shift. Local records are not independently verified; calculate before approval."); renderDispatchEditor(); } catch (error) { $("dispatchStatus").textContent = error.message; } finally { $("dispatchImport").value = ""; } };
+  $("dispatchHandoff").onclick = () => { try { const report = dispatchHandoffText(); if (report.length > 12000) throw new Error("This shift exceeds the handoff document limit. Export the full shift JSON; no work orders were omitted silently."); const doc = blankDocument("logistics"); doc.title = "Warehouse dispatch shift handoff"; doc.sections = (report.match(/[\s\S]{1,1500}/g) || []).map((body, i) => ({ heading: "Handoff · part " + (i + 1), body })); saveDocument(doc); $("dispatchStatus").textContent = "Handoff draft created locally. Review reported status and missing facts before sharing."; } catch (error) { $("dispatchStatus").textContent = error.message; } };
+  $("dispatchDiscuss").onclick = () => { if (!$("dispatchShare").checked) { $("dispatchStatus").textContent = "Choose whether to share the shift summary before asking the panel to review it."; return; } const report = dispatchHandoffText(); if (report.length > 7000) { $("dispatchStatus").textContent = "This shift exceeds the live review limit. Create a smaller supplied shift or select a handoff excerpt in Documents; no automatic partial review was sent."; return; } setMode("floor"); submitQuestion("Review this supplied warehouse dispatch handoff. Identify bottlenecks, missing facts and the next practical step. Do not claim to have assigned real people or cleared physical safety checks.\n<supplied_dispatch_handoff>\n" + promptText(report, 7000) + "\n</supplied_dispatch_handoff>"); };
+  renderDispatchEditor(); renderDispatchOutput();
   $("chipClear").onclick = () => { addressed = null; renderSeats(); renderChip(); };
   $("pace").value = store.get("pace", "quick");
   $("pace").onchange = () => store.set("pace", $("pace").value);
