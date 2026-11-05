@@ -626,7 +626,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
     "audio":{"name":"Julian Ross","voiceId":"jiJOsq5SEyngSDmtW0UP"},
     "mathematics":{"name":"Devi","voiceId":"Ghr5KCyOzBvJpcdBbJhE"},
     "history":{"name":"Wyman","voiceId":"KYpkPJwl1dpLc9QpMwnO"},
-    "it":{"name":"Darian — Warm Grounded Storyteller","voiceId":"gOupLcAkjEnguROwi4oS"},
+    "it":{"name":"Josh — Teacher for Kids","voiceId":"nzFihrBIvB34imQBuxub"},
     "supply-chain":{"name":"Elara — Crisp Pro Narrator","voiceId":"WQP7cQUF5aAS6Axh5yaa"}};
 
   const OPERATIONS_STAGES = ["receiving", "inspection", "putaway", "inventory", "replenishment", "picking", "packing", "dispatch", "returns"];
@@ -1018,22 +1018,23 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
     try {
       const response = await fetch(PREMIUM_RELAY + "/health", { signal: abort.signal, cache: "no-store" });
       const data = await response.json();
-      if (!response.ok || data.relay !== "malimar-voice-relay" || data.version !== 1 || !data.ready || !/^[a-f0-9]{48}$/.test(data.session)) throw new Error("Unavailable");
+      if (response.ok && data.relay === "malimar-voice-relay" && data.version === 1) throw new Error("voice_relay_update_required");
+      if (!response.ok || data.relay !== "malimar-voice-relay" || data.version !== 2 || !data.ready || !/^[a-f0-9]{48}$/.test(data.session)) throw new Error("Unavailable");
       if (!$("premiumConsent").checked) return;
       premiumVoiceSession = data.session;
       $("voice").hidden = false; renderVoice();
       $("premiumConnect").textContent = "Disconnect premium voices";
       $("premiumStatus").textContent = "Private relay connected. New panel speech uses ElevenLabs candidates; playback and voice availability still need a live test. Relay character budget remaining: " + Math.max(0, Number(data.remainingCharacters) || 0) + ".";
-    } catch { $("premiumStatus").textContent = "Premium relay is unavailable or has no key configured. Device voices remain available. Start the private relay and open its local app page if your browser blocks local connections."; }
+    } catch (error) { $("premiumStatus").textContent = error?.message === "voice_relay_update_required" ? "Your private voice relay needs an update. Use the current relay files and relaunch it through your private setup before connecting. This prevents an old roster from playing a different voice. Keep your key in the local setup, never in chat or this page." : "Premium relay is unavailable or has no key configured. Device voices remain available. Start the private relay and open its local app page if your browser blocks local connections."; }
     finally { clearTimeout(timer); $("premiumConnect").disabled = false; renderVoiceEngine(); }
   }
   async function playPremiumSpeech(job, done, epoch) {
     job.abort = new AbortController();
     try {
-      const response = await fetch(PREMIUM_RELAY + "/tickets", { method: "POST", headers: { "content-type": "application/json", "x-malimar-voice-session": premiumVoiceSession }, body: JSON.stringify({ seatId: job.s.id, text: job.text }), signal: job.abort.signal });
+      const response = await fetch(PREMIUM_RELAY + "/tickets", { method: "POST", headers: { "content-type": "application/json", "x-malimar-voice-session": premiumVoiceSession }, body: JSON.stringify({ seatId: job.s.id, text: job.text, voiceId: VOICE_CAST[job.s.id]?.voiceId }), signal: job.abort.signal });
       if (!response.ok) throw new Error("Voice ticket unavailable");
       const data = await response.json();
-      if (!/^[a-f0-9]{48}$/.test(data.ticket)) throw new Error("Invalid voice ticket");
+      if (!/^[a-f0-9]{48}$/.test(data.ticket) || data.voiceId !== VOICE_CAST[job.s.id]?.voiceId) throw new Error("Invalid voice ticket");
       if (epoch !== speechEpoch || stopped || !voiceOn || !premiumVoiceSession) return;
       job.audio = new Audio(PREMIUM_RELAY + "/stream/" + data.ticket);
       job.audio.onended = done;
@@ -1057,7 +1058,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
     premiumVoiceSession = "";
     renderVoiceEngine();
     $("premiumConnect").textContent = "Connect premium voices";
-    $("premiumStatus").textContent = "Premium audio was unavailable or playback was blocked. Device voices will handle the next speech. Check the relay budget, account access and browser audio permissions.";
+    $("premiumStatus").textContent = "Premium audio was unavailable or playback was blocked. Device voices will handle the next speech. Check that the app and relay use the same current casting, then check the relay budget, account access and browser audio permissions.";
     job.audio?.pause();
     if (job.started || !synth) done();
     else {
