@@ -225,6 +225,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
       <button class="tool" id="documentsOpen" type="button">Documents</button>
       <button class="tool" id="clockOpen" type="button">Time clock</button>
       <button class="tool" id="memoryOpen" type="button">Memory</button>
+      <button class="tool" id="agentsOpen" type="button" aria-controls="agentWorkspace">Agent connections</button>
       <button class="tool" id="premiumShow" type="button">ElevenLabs setup</button>
       <button class="tool" id="voiceEngine" type="button" aria-controls="premiumWorkspace">Device voices</button>
       <label class="pace" for="pace">Pace
@@ -336,6 +337,25 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
           <a class="fine" href="https://thermere.github.io/malimar-ballroom/" target="_blank" rel="noopener">Open the published Ballroom</a>
         </div>
         <p class="fine" id="connectionHelp">Live answers require a reachable model. A browser name or an ElevenLabs subscription alone does not provide one.</p>
+      </details>
+      <details class="operations" id="agentWorkspace">
+        <summary>Agent connections · Grok, OpenAI and Claude</summary>
+        <p class="fine">Invite an outside AI to work with this Ballroom. Start the private agent gateway on your computer, then paste its one-use pairing code here. API keys stay in that process. Compatible local MCP clients can use the same tools. <a href="https://github.com/thermere/malimar-ballroom/blob/main/relay-agent/README.md" target="_blank" rel="noopener">Setup and client configuration</a></p>
+        <label>Gateway pairing code<input id="agentCode" type="password" maxlength="24" autocomplete="off" spellcheck="false" placeholder="Code from the gateway console · not an API key"></label>
+        <fieldset id="agentGrants"><legend>What may this connection do during this visit?</legend>
+          <label class="nav-consent fine"><input id="agentGrantRead" type="checkbox">Read the last 12 visible conversation entries (up to 1,600 characters each). Previously pasted information in those entries is included.</label>
+          <label class="nav-consent fine"><input id="agentGrantContribute" type="checkbox">Post attributed, unverified AI contributions to this conversation.</label>
+          <label class="nav-consent fine"><input id="agentGrantPanel" type="checkbox">Ask 1–3 enabled specialists a new question, using the panel's existing AI and voice services.</label>
+          <label class="nav-consent fine"><input id="agentGrantControl" type="checkbox">Change format / pace while idle and pause panel speech.</label>
+          <label class="nav-consent fine"><input id="agentGrantDraft" type="checkbox">Create new local document drafts for my review.</label>
+        </fieldset>
+        <p class="fine">Pairing shares specialist names and session status with the private gateway. Starting an API agent sends your task and permitted session data to the chosen provider, which may charge usage. A local MCP client receives only permitted tool results; its own AI service may process them. Saved memory, saved document contents, time-clock records, location and credentials are excluded. Pairing expires on disconnect, a new visit, or after 30 minutes.</p>
+        <div class="nav-actions"><button class="tool" id="agentConnect" type="button">Pair private gateway</button><button class="tool" id="agentDisconnect" type="button" disabled>Disconnect agents</button></div>
+        <label>API agent<select id="agentProvider"><option value="xai">Grok · xAI</option><option value="openai">OpenAI · models used by ChatGPT</option><option value="anthropic">Claude · Anthropic</option></select></label>
+        <label>Task for this agent<textarea id="agentTask" maxlength="2000" placeholder="Compare the plan, ask the relevant specialists about gaps, then draft a practical next step."></textarea></label>
+        <div class="nav-actions"><button class="tool" id="agentRun" type="button" disabled>Run API agent</button></div>
+        <p class="fine" id="agentStatus" role="status">Disconnected. No conversation has been shared with an outside agent.</p>
+        <pre class="fine" id="agentActivity" aria-label="Agent activity" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
       </details>
       <details class="operations" id="researchWorkspace">
         <summary>Research · companies and current sources</summary>
@@ -1438,7 +1458,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
   function transcript() {
     return record.filter(e => e.text).slice(-24).map(e => speakerOf(e) + ": " + e.text.slice(0, 1200)).join("\n");
   }
-  function matter() { return $("matter").value.trim().slice(0, 3000) || "None given."; }
+  function matter() { return typeof agentPanelOwner !== "undefined" && agentPanelOwner ? "Matter notes are not attached to outside-agent panel requests." : $("matter").value.trim().slice(0, 3000) || "None given."; }
 
   function seatCatalog(pool, civic = false) {
     return pool.map(s => s.id + "|" + (s.perspective || (civic ? "specialist" : s.domain || s.side)) + "|" + s.name + "|" + s.brief.slice(0, 44)).join("\n");
@@ -2709,7 +2729,129 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
     try { rec.start(); navListening = true; $("navVoice").textContent = "Voice controls listening"; $("navVoice").setAttribute("aria-pressed", "true"); navigationMessage("Listening for commands prefixed with Ballroom. Say Ballroom, stop listening to finish."); }
     catch { stoppedListening(); navigationMessage("Voice input could not start. Another speech input may still be closing; try again."); }
   }
-  function stopAll() {
+  // Outside agents get typed, visit-scoped actions, never an eval/DOM/key API.
+  const AGENT_RELAY = "http://127.0.0.1:8716";
+  const AGENT_GRANTS = { read: "agentGrantRead", contribute: "agentGrantContribute", panel: "agentGrantPanel", control: "agentGrantControl", draft: "agentGrantDraft" };
+  let agentConnection = null, agentEpoch = 0, agentPanelOwner = null;
+  function agentScopes() { return Object.entries(AGENT_GRANTS).filter(([, id]) => $(id).checked).map(([scope]) => scope); }
+  function agentSnapshot(scopes) {
+    return { busy, format: mode, pace: $("pace").value === "quick" ? "quick" : "considered", roster: seats.map(s => ({ id: s.id, name: s.name, enabled: s.on })),
+      entries: scopes.includes("read") ? record.filter(e => e.text).slice(-12).map(e => ({ speaker: speakerOf(e), text: e.text.slice(0, 1600) })) : [] };
+  }
+  async function agentFetch(path, data, connection = agentConnection) {
+    const abort = new AbortController(), timer = setTimeout(() => abort.abort(), 4500);
+    try {
+      const response = await fetch(AGENT_RELAY + path, { method: "POST", headers: { "content-type": "application/json", ...(connection ? { "x-malimar-agent-session": connection.token } : {}) }, body: JSON.stringify(data), signal: abort.signal, cache: "no-store" });
+      const result = await response.json(); if (!response.ok) throw new Error(typeof result.error === "string" ? result.error : "gateway_unavailable"); return result;
+    } finally { clearTimeout(timer); }
+  }
+  function agentControls(connected) {
+    $("agentConnect").disabled = connected; $("agentDisconnect").disabled = !connected;
+    $("agentCode").disabled = connected; $("agentGrants").disabled = connected;
+    $("agentRun").disabled = !connected;
+  }
+  async function disconnectAgent(message = "Agents disconnected. Pair again with a restarted gateway to grant new access.") {
+    const old = agentConnection; agentConnection = null; agentEpoch++;
+    agentControls(false); $("agentStatus").textContent = message;
+    if (agentPanelOwner && agentPanelOwner === old) stopAll(true);
+    if (old) { clearTimeout(old.timer); try { await agentFetch("/disconnect", {}, old); } catch {} }
+  }
+  async function connectAgent() {
+    const code = $("agentCode").value.trim(), scopes = agentScopes();
+    if (!/^[a-f0-9]{24}$/.test(code) || !scopes.length) { $("agentStatus").textContent = "Choose permissions and paste the 24-character pairing code from your private gateway console."; return; }
+    const epoch = ++agentEpoch; $("agentConnect").disabled = true; $("agentCode").value = "";
+    try {
+      const result = await agentFetch("/pair", { code, scopes, snapshot: agentSnapshot(scopes) }, null);
+      if (!/^[a-f0-9]{48}$/.test(result.token) || !Number.isFinite(result.expires) || !Array.isArray(result.providers)) throw new Error("invalid_gateway");
+      if (epoch !== agentEpoch) { void agentFetch("/disconnect", {}, { token: result.token }).catch(() => {}); return; }
+      agentConnection = { token: result.token, scopes, expires: result.expires, seen: new Set(), acks: [], reported: new Set(), providers: result.providers };
+      agentControls(true); $("agentStatus").textContent = "Paired for this visit. Granted: " + scopes.join(", ") + ". Disconnect agents or send your own question to take back control.";
+      $("agentActivity").textContent = result.providers.map(p => p.id + ": " + (p.ready ? p.model : "not configured in gateway")).join("\n");
+      void syncAgent(agentConnection);
+    } catch { if (epoch === agentEpoch) { agentControls(false); $("agentStatus").textContent = "Pairing failed. Start the current gateway and use its fresh one-use code. If this browser blocks local connections, open http://127.0.0.1:8716 in your browser."; } }
+  }
+  function agentCommandAllowed(command, connection) {
+    if (!command || typeof command.id !== "string" || !/^[a-f0-9-]{36}$/.test(command.id) || typeof command.identity !== "string" || command.identity.length > 160 || !Number.isFinite(command.expires) || command.expires <= Date.now() || command.expires > Date.now() + 16000) return false;
+    const scope = { ask_panel: "panel", post_contribution: "contribute", set_session: "control", pause_session: "control", create_draft: "draft" }[command.name];
+    if (!scope || !connection.scopes.includes(scope)) return false;
+    const a = command.args, exact = keys => a && typeof a === "object" && !Array.isArray(a) && Object.keys(a).length === keys.length && keys.every(k => Object.hasOwn(a, k));
+    const text = (v, max) => typeof v === "string" && !!v.trim() && v.length <= max;
+    if (command.name === "post_contribution") return exact(["text"]) && text(a.text, 4000);
+    if (command.name === "create_draft") return exact(["kind", "title", "body"]) && ["general", "legal", "logistics"].includes(a.kind) && text(a.title, 140) && text(a.body, 1800);
+    if (command.name === "set_session") return exact(["format", "pace"]) && ["floor", "hearing", "civic"].includes(a.format) && ["quick", "considered"].includes(a.pace);
+    if (command.name === "pause_session") return exact([]);
+    return exact(["question", "specialistIds"]) && text(a.question, 1200) && Array.isArray(a.specialistIds) && a.specialistIds.length >= 1 && a.specialistIds.length <= 3 && new Set(a.specialistIds).size === a.specialistIds.length && a.specialistIds.every(id => active().some(s => s.id === id));
+  }
+  function executeAgentCommand(command, connection) {
+    if (agentConnection !== connection || !agentCommandAllowed(command, connection)) throw new Error("Action denied by the browser's permissions or validation.");
+    const a = command.args, identity = command.identity;
+    if (command.name === "pause_session") { stopAll(true); return "Panel generation and speech paused."; }
+    if (command.name === "set_session") { if (busy) throw new Error("The panel is busy."); setMode(a.format); $("pace").value = a.pace === "considered" ? "default" : "quick"; return "Session settings changed for this visit."; }
+    if (command.name === "post_contribution") { addEntry({ clerk: true, text: "Outside agent · " + identity + ":\n" + a.text, note: "Unverified AI contribution. This is not the visitor's statement or independently checked evidence." }); return "Attributed contribution added."; }
+    if (command.name === "create_draft") { const draft = blankDocument(a.kind); draft.title = a.title; draft.fields = [{ label: "Created by", value: "Outside agent · " + identity }]; draft.sections = [{ heading: "Unverified AI draft · review required", body: a.body }]; draft.missing.unshift("Outside-agent draft. Verify every fact, calculation and applicable requirement before use."); const ref = saveDocument(draft); addEntry({ clerk: true, text: "Outside agent · " + identity + " created a new draft for your review.", documentId: ref.id, documentVersion: ref.version }); return "New local draft saved for review."; }
+    if (busy) throw new Error("The panel is busy.");
+    // A dedicated path prevents model text from running clock, memory or review commands.
+    void askAgentPanel(a.question, a.specialistIds, identity, connection);
+    return "Panel question started; this is not a completed answer. Read session later for contributions.";
+  }
+  async function askAgentPanel(question, ids, identity, connection) {
+    if (busy || agentConnection !== connection) return;
+    setBusy(true); stopped = false; agentPanelOwner = connection; ctl = new AbortController();
+    try {
+      let sample = live || await samplePromise;
+      if (agentConnection !== connection || stopped) return;
+      if (!sample || claudeOff) sample = await reconnectProviders().catch(() => null);
+      if (agentConnection !== connection || stopped) return;
+      if (!sample) throw new Error("No live panel provider is available. Offline examples still work.");
+      live = sample; claudeOff = false;
+      pendingSteps = []; hearingQuestion = "Outside agent request from " + identity + " (not a statement by the visitor): " + question; hearingSummaries = []; hearingReviews = 0; hearingParticipants = new Set();
+      hearingDocumentContext = ""; hearingDocumentRef = null; hearingMemoryContext = ""; hearingMemoryRefs = []; hearingResearch = null;
+      addEntry({ clerk: true, text: hearingQuestion, note: "Agent-requested panel discussion. Saved documents, memory and clock events were not attached." });
+      const steps = ids.map(id => ({ s: seat(id), role: null }));
+      pendingSteps = await runSteps(sample, steps);
+    } catch (error) { if (!stopped) addEntry({ clerk: true, text: "The agent-requested panel could not complete.", note: error.message || "Panel provider unavailable." }); }
+    finally { agentPanelOwner = null; setBusy(false); persist(); }
+  }
+  async function syncAgent(connection) {
+    if (agentConnection !== connection) return;
+    if (Date.now() >= connection.expires) { void disconnectAgent("Agent permissions expired. Restart the gateway to pair a new visit."); return; }
+    try {
+      const sent = connection.acks.slice();
+      const result = await agentFetch("/sync", { snapshot: agentSnapshot(connection.scopes), acks: sent }, connection);
+      if (agentConnection !== connection) return;
+      connection.acks.splice(0, sent.length);
+      for (const command of (Array.isArray(result.commands) ? result.commands : []).slice(0, 2)) {
+        if (connection.seen.has(command.id)) continue;
+        if (connection.seen.size >= 100) { void disconnectAgent("This visit's agent-action limit was reached."); return; }
+        connection.seen.add(command.id);
+        try { connection.acks.push({ id: command.id, ok: true, message: executeAgentCommand(command, connection) }); }
+        catch (error) { connection.acks.push({ id: String(command.id || "").slice(0, 60), ok: false, message: error.message.slice(0, 300) }); }
+      }
+      $("agentActivity").textContent = (Array.isArray(result.events) ? result.events : []).slice(-25).map(e => String(e.at).slice(0, 30) + " · " + String(e.text).slice(0, 220)).join("\n");
+      const job = result.job;
+      if (job && ["completed", "failed", "stopped"].includes(job.status) && !connection.reported.has(job.id)) {
+        connection.reported.add(job.id); $("agentRun").disabled = false;
+        if (job.status === "completed") {
+          if (connection.scopes.includes("contribute")) addEntry({ clerk: true, text: "Outside agent · " + String(job.identity).slice(0, 160) + ":\n" + String(job.text).slice(0, 4000), note: "Unverified AI response. No independent source verification was performed by this connection." });
+          else connection.privateResult = "\n\nPrivate task result · " + String(job.identity).slice(0, 160) + ":\n" + String(job.text).slice(0, 4000);
+          $("agentStatus").textContent = "Agent task completed. Review its response and activity. Agents remain paired until you disconnect.";
+        } else $("agentStatus").textContent = "Agent task " + job.status + ": " + String(job.error).slice(0, 100) + ". Review activity for actions already completed.";
+      }
+      if (connection.privateResult) $("agentActivity").textContent += connection.privateResult;
+    } catch { if (agentConnection === connection) { void disconnectAgent("Agent gateway connection lost. Permissions revoked in this browser; restart the gateway to reconnect."); } return; }
+    if (agentConnection === connection) connection.timer = setTimeout(() => { void syncAgent(connection); }, 800);
+  }
+  async function runConnectedAgent() {
+    const connection = agentConnection; if (!connection) return;
+    const provider = $("agentProvider").value, task = $("agentTask").value.trim();
+    if (!task) { $("agentStatus").textContent = "Give this agent a task first."; return; }
+    if (!connection.providers.some(p => p.id === provider && p.ready)) { $("agentStatus").textContent = "This provider is not configured in the private gateway. Follow the setup instructions; do not put a key in this page or chat."; return; }
+    $("agentRun").disabled = true;
+    try { await agentFetch("/run", { provider, task }, connection); if (agentConnection === connection) $("agentStatus").textContent = "Agent working. Provider usage may be charged. Disconnect agents to cancel pending actions."; }
+    catch (error) { if (agentConnection === connection) { $("agentRun").disabled = false; $("agentStatus").textContent = "Agent could not start: " + error.message; } }
+  }
+  function stopAll(fromAgent = false) {
+    if (!fromAgent && typeof agentConnection !== "undefined" && agentConnection) void disconnectAgent("You stopped Ballroom. Outside-agent access has been revoked.");
     stopped = true;
     ctl?.abort();
     if (typeof researchController !== "undefined") researchController?.abort();
@@ -2891,6 +3033,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
   // Controls
   function submitQuestion(q) {
     if (!q) return;
+    if (typeof agentConnection !== "undefined" && agentConnection) void disconnectAgent("You took the floor. Outside-agent access has been revoked.");
     $("ask").value = "";
     store.set("draft", "");
     if (busy) { queuedQuestion = q; stopAll(); $("status").textContent = "Pausing to hear your question"; return; }
@@ -2919,6 +3062,11 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
   $("retryLive").onclick = () => { if (!busy) void reconnectProviders(); };
   $("seatFilter").onchange = renderSeats;
   $("seatSearch").addEventListener("input", renderSeats);
+  $("agentsOpen").onclick = () => { $("agentWorkspace").open = true; $("agentCode").focus(); };
+  $("agentConnect").onclick = () => { void connectAgent(); };
+  $("agentDisconnect").onclick = () => { void disconnectAgent(); };
+  $("agentRun").onclick = () => { void runConnectedAgent(); };
+  window.addEventListener("pagehide", () => { void disconnectAgent("Visit ended. Outside-agent permissions revoked."); });
   $("chipClear").onclick = () => { addressed = null; renderSeats(); renderChip(); };
   $("pace").value = store.get("pace", "quick");
   $("pace").onchange = () => store.set("pace", $("pace").value);
