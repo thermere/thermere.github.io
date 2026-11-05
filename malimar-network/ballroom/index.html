@@ -242,6 +242,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
           <li><a href="https://www.sec.gov/edgar/search/" target="_blank" rel="noopener">SEC EDGAR: public company filings</a></li>
           <li><a href="https://www.bea.gov/data/gdp/gdp-industry" target="_blank" rel="noopener">BEA: economic output by industry</a></li>
           <li><a href="https://www.theocc.com/company-information/documents-and-archives/options-disclosure-document" target="_blank" rel="noopener">OCC: characteristics and risks of standardized options</a></li>
+          <li><a href="https://www.optionseducation.org/advancedconcepts/theta" target="_blank" rel="noopener">Options Industry Council: theta, time decay and expiration</a></li>
           <li><a href="https://www.investor.gov/introduction-investing/general-resources/news-alerts/alerts-bulletins/investor-bulletins-63" target="_blank" rel="noopener">Investor.gov: options mechanics and risks</a></li>
           <li><a href="https://www.myplate.gov/" target="_blank" rel="noopener">USDA MyPlate: food and meal-planning resources</a></li>
           <li><a href="https://odphp.health.gov/moveyourway" target="_blank" rel="noopener">HHS Move Your Way: physical-activity resources</a></li>
@@ -1130,7 +1131,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
       if (!data || typeof data.text !== "string" || !data.text.trim()) throw { code: "empty_completion" };
       const text = data.text;
       opts.onText?.({ text });
-      return { text, truncated: false };
+      return { text, truncated: data.truncated === true };
     }
     const sample = (prompt, opts = {}) => run(prompt, opts);
     sample.json = jsonMode(run);
@@ -1312,6 +1313,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
   function optionsTeachingNotes() {
     return "Teach the requested mechanism instead of substituting generic warnings. Candlestick reading describes the underlying; connect it to premium, Greeks, implied volatility, time remaining, spread/slippage, fees and exercise/assignment where relevant. Do not assume the visitor believes speed or charts guarantee profit. For skill-building discuss testable entry/exit rules, cost-aware expectancy, drawdown, sample uncertainty and out-of-sample validation; never invent a minimum number of trades or months. If asked how smart you are, state your unverified track record briefly, then demonstrate relevant technical knowledge. Do not invent claims about how many traders lose. Jurisdiction is needed for specific legal/tax questions, not a prerequisite to explaining Greeks. Give a small explicitly hypothetical worked example when it helps, without repeating the same example every turn.\n" +
       "Curated educational reference, checked 2026-11-04: OIC Understanding Options Greeks, https://www.optionseducation.org/advancedconcepts/understanding-options-greeks . Greeks estimate sensitivity to pricing inputs; they are not exact forecasts and change as inputs change. No live option chain or current quotes are available.\n" +
+      "OIC Theta reference, checked 2026-11-04, https://www.optionseducation.org/advancedconcepts/theta : theta estimates premium change from one day's passage with other inputs fixed. Decay is nonlinear and tends to accelerate as expiration nears; moneyness and volatility also matter.\n" +
       "For a local Greek approximation, premium change per share = delta*dS + 0.5*gamma*dS^2 + thetaPerDay*days + vegaPerPoint*IVpercentagePoints. The example below assumes a 100-share multiplier; confirm actual contract deliverables before applying it. It is a local approximation, not an exact repricing or return prediction, especially near expiry.\n<hypothetical_example>\n" + JSON.stringify(optionsGreekExample()) + "\n</hypothetical_example>";
   }
   function seatPrompt(s, role, exchange = null) {
@@ -1378,6 +1380,15 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
     if (quote.length < 24 || quote.length > 280 || !text.includes(quote) || question.length < 16 || question.length > 350) return null;
     return { challenger, exchange: { speaker: speaker.name, quote, question } };
   }
+  function checkOptionsAnswer(text) {
+    const reversedTheta = /\blonger[\s-]+dated(?:\s+(?:options?|contracts?))?\s+(?:decay(?:s|ing)?|lose\s+time\s+value)\s+(?:more quickly|faster)\b/i.test(text);
+    if (!reversedTheta) return { text, blocked: false };
+    return {
+      blocked: true,
+      text: "A reference check caught a reversed time-decay comparison in this draft. Theta estimates the effect of one day's passage with other pricing inputs held fixed. Time decay is nonlinear and tends to accelerate as expiration approaches; moneyness and volatility also affect it. The Options Industry Council's Theta guide explains that relationship. This correction addresses that specific error; it does not establish the accuracy of every possible options claim.",
+      note: "Blocked a known reversed-theta claim using the OIC Theta reference. This targeted check is not general factual verification."
+    };
+  }
   function validInvitation(value, candidates) {
     if (!value || value.interrupt !== false || !value.invite || typeof value.invite !== "object") return null;
     const v = value.invite, s = candidates.find(c => c.on && c.id === v.seatId && c.id !== "president");
@@ -1406,10 +1417,19 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
     setSeat(s.id, "thinking");
     $("status").textContent = s.name + " is thinking";
     ctl = new AbortController();
-    let spoken = 0, ok = true, peerCut = false, reviewPromise = null;
+    let spoken = 0, ok = true, peerCut = false, referenceBlocked = false, reviewPromise = null;
     const turnController = ctl;
+    const applyAnswer = text => {
+      if (referenceBlocked) return;
+      const checked = s.id === "options" ? checkOptionsAnswer(text) : { text, blocked: false };
+      if (checked.blocked) {
+        referenceBlocked = true; cancelSpeech(); spoken = 0; turnController.abort();
+        entry.note = checked.note;
+      }
+      entry.text = checked.text; said.textContent = checked.text;
+    };
     const maybeReview = () => {
-      if (reviewPromise || stopped || !$("panelChallenges").checked || !floor.state || (floor.state.reviewedIds || []).includes(s.id) || (floor.state.reviewedIds || []).length >= 2 || hearingReviews >= 2 || s.id === "president" || ["challenge", "clarification", "checking", "mediation"].includes(role)) return;
+      if (referenceBlocked || reviewPromise || stopped || !$("panelChallenges").checked || !floor.state || (floor.state.reviewedIds || []).includes(s.id) || (floor.state.reviewedIds || []).length >= 2 || hearingReviews >= 2 || s.id === "president" || ["challenge", "clarification", "checking", "mediation"].includes(role)) return;
       if (entry.text.length < 100 || !/[.!?]\s/.test(entry.text) || (!floor.pool?.some(p => p.on && p.id !== s.id && p.id !== "president") && !floor.candidates?.length)) return;
       (floor.state.reviewedIds ||= []).push(s.id); hearingReviews++;
       const audit = new AbortController(), abort = () => audit.abort();
@@ -1442,15 +1462,19 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
         onText: ({ text }) => {
           if (el.classList.contains("pending")) { el.classList.remove("pending"); setSeat(s.id, "speaking"); $("status").textContent = s.name + " is speaking"; }
           if (peerCut || stopped) return;
-          entry.text = text; said.textContent = text; follow(); speakDone(false); maybeReview();
+          applyAnswer(text); follow(); speakDone(false); maybeReview();
         }
       });
-      if (!peerCut && !stopped) { entry.text = text; said.textContent = text; speakDone(false); maybeReview(); }
+      if (!peerCut && !stopped) { applyAnswer(text); speakDone(false); maybeReview(); }
       if (stopped) ok = false;
-      if (truncated) entry.note = "Cut short at the length limit.";
+      if (truncated && !referenceBlocked) {
+        const complete = entry.text.match(/^[\s\S]*[.!?]["')]*(?:\s+|$)/);
+        entry.text = said.textContent = complete ? complete[0].trim() : "";
+        entry.note = "Cut short at the length limit. Ask a focused follow-up to continue.";
+      }
     } catch (e) {
-      ok = peerCut && !stopped;
-      entry.text = e?.text || entry.text || "";
+      ok = (peerCut || referenceBlocked) && !stopped;
+      entry.text = referenceBlocked ? entry.text : e?.text || entry.text || "";
       said.textContent = entry.text;
       el.classList.remove("pending");
       if (e?.code === "cancelled") { if (!entry.text) { el.remove(); record.splice(record.indexOf(entry), 1); } }
