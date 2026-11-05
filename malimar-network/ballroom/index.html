@@ -194,6 +194,10 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 dialog { width: min(480px, calc(100vw - 32px)); padding: 18px; background: var(--surface); color: var(--ink); border: 1px solid var(--rule); border-radius: 3px; }
 #premiumWorkspace { max-height: calc(100dvh - 32px); overflow-y: auto; }
 #premiumWorkspace > * + * { margin-top: 12px; }
+.session-voice { padding: 12px; border: 1px solid var(--rule); border-radius: 4px; }
+.session-voice h3 { margin: 0 0 8px; }
+.session-voice input[type="file"], .session-voice audio { display: block; width: 100%; max-width: 100%; margin-block: 8px; }
+.session-voice audio[hidden] { display: none; }
 dialog::backdrop { background: rgb(0 0 0 / .45); }
 dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
 .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; font-weight: 600; }
@@ -238,6 +242,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
       <button class="tool" id="dispatchOpen" type="button" aria-controls="dispatchWorkspace">Warehouse dispatch</button>
       <button class="tool" id="gameOpen" type="button" aria-controls="gameStudio">Game Studio</button>
       <button class="tool" id="premiumShow" type="button">ElevenLabs setup</button>
+      <button class="tool" id="sessionVoiceOpen" type="button">Your session voice</button>
       <button class="tool" id="voiceEngine" type="button" aria-controls="premiumWorkspace">Device voices</button>
       <label class="pace" for="pace">Pace
         <select id="pace">
@@ -492,6 +497,16 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
         <button class="tool" id="premiumConnect" type="button">Connect premium voices</button>
         <button class="tool" id="premiumTest" type="button">Test ElevenLabs voice · uses credits</button>
         <p class="fine" id="premiumStatus" role="status">Device voices active. Private premium relay not connected.</p>
+        <section class="session-voice" aria-labelledby="sessionVoiceTitle">
+          <h3 id="sessionVoiceTitle">Upload a voice for this chat session</h3>
+          <p class="fine">Choose one clear WAV or MP3 recording, 10 seconds–3 minutes and up to 20 MB. About 1–2 minutes of one speaker usually works best. Previewing the recording is local; creating a voice sends it to your own ElevenLabs account through private relay version 3.</p>
+          <label>Voice sample<input id="sessionVoiceFile" type="file" accept=".wav,.mp3,audio/wav,audio/x-wav,audio/mpeg"></label>
+          <p class="fine" id="sessionVoiceFileInfo">No sample chosen.</p>
+          <audio id="sessionVoicePreview" controls preload="metadata" aria-label="Original voice sample preview" hidden></audio>
+          <label class="nav-consent fine"><input id="sessionVoicePermission" type="checkbox">This is my voice, or I have the speaker's express permission and the rights to use this recording for AI narration. I authorize creating a clone in my ElevenLabs account. Account permissions, voice slots, verification and usage charges apply. The clone stays there until I delete it; this page remembers its selection only during this visit.</label>
+          <div class="nav-actions"><button class="tool" id="sessionVoiceCreate" type="button">Create and use session voice</button><button class="tool" id="sessionVoiceUse" type="button" disabled>Use uploaded voice</button><button class="tool" id="sessionVoicePanel" type="button" disabled>Return to panel voices</button><button class="tool" id="sessionVoiceCheck" type="button" disabled>Check provider verification</button><button class="tool" id="sessionVoiceDelete" type="button" disabled>Delete created clone</button><button class="tool" id="sessionVoiceCancel" type="button" disabled>Cancel upload</button></div>
+          <p class="fine" id="sessionVoiceStatus" role="status">No uploaded voice is selected. Speaker names stay visible when one session voice narrates the panel. New replies still require paid speech generation.</p>
+        </section>
         <ul class="sources">
           <li><a href="https://elevenlabs.io/voice-library" target="_blank" rel="noopener">ElevenLabs voice library</a> · character and conversational auditions</li>
           <li><a href="https://www.cartesia.ai/sonic" target="_blank" rel="noopener">Cartesia Sonic voices</a> · real-time conversation auditions</li>
@@ -1064,9 +1079,10 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
   let speechQueue = [], currentSpeech = null, speechEpoch = 0, speechHold = false;
   const PREMIUM_RELAY = "http://127.0.0.1:8715";
   let premiumVoiceSession = "", speechGuidanceActive = false;
+  let premiumRelayVersion = 0, uploadedVoice = null, voiceSampleFile = null, voiceSampleURL = "", voiceUploadController = null, voiceUploadEpoch = 0;
   function renderVoiceEngine(playing = "", name = "") {
     const premium = playing ? playing === "elevenlabs" : !!premiumVoiceSession;
-    $("voiceEngine").textContent = premium ? "ElevenLabs" + (name ? " · " + name : " selected") : "Device voices";
+    $("voiceEngine").textContent = premium ? "ElevenLabs" + (uploadedVoice?.active ? " · your session voice" : name ? " · " + name : " selected") : "Device voices";
     $("voiceEngine").title = premium ? "Premium voice relay selected. Open speech setup and status." : "Browser device voices are selected. Open ElevenLabs setup and status.";
   }
   function openPremiumSetup() {
@@ -1076,7 +1092,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
     $("premiumConsent").focus();
   }
   async function connectPremiumVoice() {
-    if (premiumVoiceSession) { premiumVoiceSession = ""; cancelSpeech(); renderVoiceEngine(); $("premiumConnect").textContent = "Connect premium voices"; $("premiumStatus").textContent = "Device voices active. Premium voices disconnected."; return; }
+    if (premiumVoiceSession) { void pauseUploadedVoice(); premiumVoiceSession = ""; premiumRelayVersion = 0; cancelSpeech(); renderVoiceEngine(); renderSessionVoice(); $("premiumConnect").textContent = "Connect premium voices"; $("premiumStatus").textContent = "Device voices active. Premium voices disconnected. Any created clone remains in your ElevenLabs account until deleted."; return; }
     if (!$("premiumConsent").checked) { $("premiumStatus").textContent = "Choose whether to share spoken responses before connecting."; return; }
     $("premiumConnect").disabled = true;
     const abort = new AbortController(), timer = setTimeout(() => abort.abort(), 2500);
@@ -1084,27 +1100,128 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
       const response = await fetch(PREMIUM_RELAY + "/health", { signal: abort.signal, cache: "no-store" });
       const data = await response.json();
       if (response.ok && data.relay === "malimar-voice-relay" && data.version === 1) throw new Error("voice_relay_update_required");
-      if (!response.ok || data.relay !== "malimar-voice-relay" || data.version !== 2 || !data.ready || !/^[a-f0-9]{48}$/.test(data.session)) throw new Error("Unavailable");
+      if (!response.ok || data.relay !== "malimar-voice-relay" || ![2, 3].includes(data.version) || !data.ready || !/^[a-f0-9]{48}$/.test(data.session)) throw new Error("Unavailable");
       if (!$("premiumConsent").checked) return;
       premiumVoiceSession = data.session;
+      premiumRelayVersion = data.version;
       $("voice").hidden = false; renderVoice();
       $("premiumConnect").textContent = "Disconnect premium voices";
       $("premiumStatus").textContent = "Private relay connected. New panel speech uses ElevenLabs candidates; playback and voice availability still need a live test. Relay character budget remaining: " + Math.max(0, Number(data.remainingCharacters) || 0) + ".";
     } catch (error) { $("premiumStatus").textContent = error?.message === "voice_relay_update_required" ? "Your private voice relay needs an update. Use the current relay files and relaunch it through your private setup before connecting. This prevents an old roster from playing a different voice. Keep your key in the local setup, never in chat or this page." : "Premium relay is unavailable or has no key configured. Device voices remain available. Start the private relay and open its local app page if your browser blocks local connections."; }
-    finally { clearTimeout(timer); $("premiumConnect").disabled = false; renderVoiceEngine(); }
+    finally { clearTimeout(timer); $("premiumConnect").disabled = false; renderVoiceEngine(); renderSessionVoice(); }
+  }
+  function renderSessionVoice() {
+    const working = !!voiceUploadController || voiceOperationBusy;
+    $("sessionVoiceFile").disabled = working;
+    $("sessionVoiceCreate").disabled = working || !!uploadedVoice;
+    $("sessionVoiceUse").disabled = working || !uploadedVoice?.ready || uploadedVoice.ended || uploadedVoice.active;
+    $("sessionVoicePanel").disabled = working || !uploadedVoice?.active;
+    $("sessionVoiceCheck").disabled = working || !uploadedVoice?.voiceId || uploadedVoice.ended;
+    $("sessionVoiceDelete").disabled = working || !uploadedVoice;
+    $("sessionVoiceCancel").disabled = !voiceUploadController;
+  }
+  async function sessionVoiceRequest(path, body = {}, binding = uploadedVoice, options = {}) {
+    const controller = options.controller || new AbortController(), timer = setTimeout(() => controller.abort(), options.mime ? 90000 : 16000);
+    try {
+      const response = await fetch(PREMIUM_RELAY + path, { method: "POST", headers: { "content-type": options.mime || "application/json", "x-malimar-voice-session": binding?.relayToken || premiumVoiceSession, ...(binding?.sampleSession ? { "x-malimar-sample-session": binding.sampleSession } : {}), ...(options.mime ? { "x-malimar-voice-consent": "owned-or-authorized" } : {}) }, body: options.mime ? body : JSON.stringify(body), signal: controller.signal, cache: "no-store" });
+      const result = await response.json(); if (!response.ok) throw new Error(typeof result.error === "string" ? result.error : "voice_operation_failed"); return result;
+    } finally { clearTimeout(timer); }
+  }
+  function sessionVoiceError(code) {
+    const messages = { sample_duration_invalid: "Use a recording from 10 seconds to 3 minutes.", sample_size_invalid: "Use a WAV or MP3 file no larger than 20 MB.", sample_type_invalid: "Choose WAV or MP3 audio.", invalid_wav: "This file is not a complete supported WAV recording.", unsupported_wav: "Export a standard PCM 16/24/32-bit or float32 mono/stereo WAV, or use MP3.", invalid_mp3: "This MP3 appears incomplete or invalid.", unsupported_mp3: "This MP3 encoding is not supported by the upload validator. Re-export a standard MP3 or PCM WAV.", voice_creation_access_denied: "Your account/key does not permit this voice creation. Check cloning access, key permissions and available voice slots in ElevenLabs.", voice_creation_vendor_limit: "ElevenLabs returned an account or usage limit. Check your account before trying again.", sample_creation_limit: "This private relay has reached its three voice-creation attempts. Check your account for created voices before a private relay relaunch.", voice_delete_failed: "Deletion did not succeed. The voice is deselected, but its clone may remain in your ElevenLabs account. Retry or remove it in My Voices.", sample_session_expired: "The private voice binding expired or ended. The provider clone can still remain in My Voices.", voice_not_verified: "This voice needs provider verification. Complete it in ElevenLabs, then Check provider verification.", voice_operation_busy: "A voice operation is still running. Wait for its result before another operation." };
+    return messages[code] || "The voice operation did not finish reliably. Check My Voices for a Malimar session voice before trying creation again. No voice was activated by this error.";
+  }
+  function chooseVoiceSample() {
+    if (uploadedVoice?.active) { cancelSpeech(); void pauseUploadedVoice(); }
+    if (voiceSampleURL) URL.revokeObjectURL(voiceSampleURL);
+    voiceSampleURL = ""; voiceSampleFile = null; const preview = $("sessionVoicePreview"); preview.pause?.(); preview.removeAttribute("src"); preview.hidden = true;
+    $("sessionVoicePermission").checked = false;
+    const file = $("sessionVoiceFile").files?.[0];
+    if (!file) { $("sessionVoiceFileInfo").textContent = "No sample chosen."; return; }
+    if (!/\.(wav|mp3)$/i.test(file.name) || !file.size || file.size > 20 * 1024 * 1024) { $("sessionVoiceFileInfo").textContent = "Choose a WAV or MP3 recording up to 20 MB."; $("sessionVoiceFile").value = ""; return; }
+    voiceSampleFile = file; voiceSampleURL = URL.createObjectURL(file); preview.src = voiceSampleURL; preview.hidden = false;
+    $("sessionVoiceFileInfo").textContent = file.name + " · " + (file.size / 1048576).toFixed(2) + " MB · original recording preview only. Not uploaded yet.";
+    renderSessionVoice();
+  }
+  let voiceOperationBusy = false;
+  async function createSessionVoice() {
+    if (busy || voiceOperationBusy || voiceUploadController) { $("sessionVoiceStatus").textContent = "Stop or finish current speech and voice operations first."; return; }
+    if (!voiceSampleFile || !$("sessionVoicePermission").checked) { $("sessionVoiceStatus").textContent = "Choose your recording and confirm permission before uploading it."; return; }
+    if (!premiumVoiceSession || !$("premiumConsent").checked) { $("sessionVoiceStatus").textContent = "Connect your own private ElevenLabs relay with the speech-sharing checkbox first."; return; }
+    if (premiumRelayVersion !== 3) { $("sessionVoiceStatus").textContent = "WAV/MP3 cloning needs private voice relay version 3. Use the current private setup to relaunch it; never paste a key into this page or chat."; return; }
+    if (uploadedVoice) { $("sessionVoiceStatus").textContent = "Use or delete the existing created voice before creating another clone."; return; }
+    cancelSpeech(); const epoch = ++voiceUploadEpoch, relayToken = premiumVoiceSession, file = voiceSampleFile;
+    voiceUploadController = new AbortController(); const controller = voiceUploadController; renderSessionVoice();
+    $("sessionVoiceStatus").textContent = "Uploading your authorized sample and asking ElevenLabs to create a voice. This can use a voice slot and account usage. Do not retry while it runs.";
+    try {
+      const created = await sessionVoiceRequest("/sample-sessions", {}, null, { controller });
+      if (!/^[a-f0-9]{48}$/.test(created.sampleSession)) throw new Error("invalid_sample_session");
+      const binding = { ...created, relayToken, ended: false, active: false };
+      if (epoch !== voiceUploadEpoch || premiumVoiceSession !== relayToken || !$("sessionVoicePermission").checked || !$("premiumConsent").checked) { binding.ended = true; void sessionVoiceRequest("/sample-sessions/end", {}, binding).catch(() => {}); return; }
+      uploadedVoice = binding;
+      const result = await sessionVoiceRequest("/sample-voice", file, binding, { mime: /\.wav$/i.test(file.name) ? "audio/wav" : "audio/mpeg", controller });
+      if (epoch !== voiceUploadEpoch || uploadedVoice !== binding) return;
+      if (!/^[A-Za-z0-9]{20,64}$/.test(result.voiceId) || result.sampleSession !== binding.sampleSession) throw new Error("invalid_created_voice");
+      Object.assign(binding, result);
+      if (!$("sessionVoicePermission").checked || !$("premiumConsent").checked || premiumVoiceSession !== relayToken) { await pauseUploadedVoice(); return; }
+      if (binding.ready && binding.active) { voiceOn = true; $("voice").hidden = false; renderVoice(); $("sessionVoiceStatus").textContent = "Your uploaded voice is selected for this visit's panel replies and read-aloud documents. Speaker labels remain visible. New speech uses your ElevenLabs credits. Provider voice: " + binding.name; }
+      else $("sessionVoiceStatus").textContent = "Voice created but not activated: ElevenLabs requires verification. Complete the provider's process, then Check provider verification. Provider voice: " + binding.name;
+    } catch (error) { if (epoch === voiceUploadEpoch) { if (uploadedVoice) uploadedVoice.active = false; $("sessionVoiceStatus").textContent = sessionVoiceError(error.message); } }
+    finally { if (voiceUploadController === controller) voiceUploadController = null; renderSessionVoice(); renderVoiceEngine(); }
+  }
+  async function pauseUploadedVoice() {
+    if (voiceUploadController) { cancelSessionVoiceUpload(); return; }
+    voiceUploadEpoch++;
+    const binding = uploadedVoice; if (!binding) return;
+    binding.active = false;
+    try { await sessionVoiceRequest("/sample-voice/select", { enabled: false }, binding); } catch {}
+    $("sessionVoiceStatus").textContent = "Uploaded voice deselected. Its clone remains in your ElevenLabs account until deleted."; renderSessionVoice(); renderVoiceEngine();
+  }
+  function cancelSessionVoiceUpload() {
+    voiceUploadEpoch++; voiceUploadController?.abort(); voiceUploadController = null;
+    const binding = uploadedVoice; if (binding) { binding.active = false; binding.ended = true; void sessionVoiceRequest("/sample-sessions/end", {}, binding).catch(() => {}); }
+    $("sessionVoiceStatus").textContent = "Upload selection cancelled. A provider request already sent may still create a clone. Check My Voices or Delete created clone before starting another."; renderSessionVoice(); renderVoiceEngine();
+  }
+  async function sessionVoiceAction(action) {
+    const binding = uploadedVoice; if (!binding || voiceOperationBusy || voiceUploadController) return;
+    if (action === "use" && (busy || !premiumVoiceSession || !$("premiumConsent").checked || !$("sessionVoicePermission").checked)) { $("sessionVoiceStatus").textContent = "Finish speech, connect premium voices and confirm both sharing and voice permission before using the sample voice."; return; }
+    const epoch = ++voiceUploadEpoch; voiceOperationBusy = true; if (action === "delete") binding.active = false; cancelSpeech(); renderSessionVoice();
+    try {
+      const result = await sessionVoiceRequest(action === "use" ? "/sample-voice/select" : "/sample-voice/" + action, action === "use" ? { enabled: true } : {}, binding);
+      if (uploadedVoice !== binding) return;
+      if (action === "use" && (epoch !== voiceUploadEpoch || !premiumVoiceSession || !$("premiumConsent").checked || !$("sessionVoicePermission").checked)) { binding.active = false; void sessionVoiceRequest("/sample-voice/select", { enabled: false }, binding).catch(() => {}); return; }
+      if (action === "delete") { uploadedVoice = null; $("sessionVoiceStatus").textContent = "The newly created clone was deleted from ElevenLabs. Panel voices are selected."; }
+      else {
+        Object.assign(binding, { ...result, active: action === "use" ? result.active === true : binding.active && result.ready && result.active });
+        if (action === "use") { voiceOn = true; $("voice").hidden = false; renderVoice(); $("sessionVoiceStatus").textContent = "Your uploaded voice is selected for this visit. New replies and read-aloud documents use paid speech generation."; }
+        else $("sessionVoiceStatus").textContent = binding.ready ? "Provider verification permits this voice. Press Use uploaded voice to select it." : "The provider has not verified this voice. Complete verification in ElevenLabs; it remains unselected.";
+      }
+    } catch (error) { binding.active = false; if (error.message === "no_uploaded_voice") { uploadedVoice = null; $("sessionVoiceStatus").textContent = "No created clone is known to this private session. If creation had an uncertain result, check My Voices for a Malimar session voice."; } else $("sessionVoiceStatus").textContent = sessionVoiceError(error.message); }
+    finally { voiceOperationBusy = false; renderSessionVoice(); renderVoiceEngine(); }
+  }
+  function endSessionVoiceVisit() {
+    voiceUploadEpoch++; voiceUploadController?.abort(); voiceUploadController = null;
+    const binding = uploadedVoice; uploadedVoice = null;
+    if (binding) void fetch(PREMIUM_RELAY + "/sample-sessions/end", { method: "POST", headers: { "content-type": "application/json", "x-malimar-voice-session": binding.relayToken, "x-malimar-sample-session": binding.sampleSession }, body: "{}", keepalive: true }).catch(() => {});
+    $("sessionVoicePreview").pause?.(); if (voiceSampleURL) URL.revokeObjectURL(voiceSampleURL); voiceSampleURL = ""; voiceSampleFile = null;
+  }
+  function premiumVoiceChoice(s) {
+    const sample = uploadedVoice?.active && uploadedVoice.ready ? uploadedVoice : null;
+    return sample ? { voiceId: sample.voiceId, name: "Your session voice", sampleSession: sample.sampleSession } : { voiceId: VOICE_CAST[s?.id]?.voiceId, name: VOICE_CAST[s?.id]?.name || "", sampleSession: "" };
   }
   async function playPremiumSpeech(job, done, epoch) {
     job.abort = new AbortController();
+    const choice = premiumVoiceChoice(job.s);
     try {
-      const response = await fetch(PREMIUM_RELAY + "/tickets", { method: "POST", headers: { "content-type": "application/json", "x-malimar-voice-session": premiumVoiceSession }, body: JSON.stringify({ seatId: job.s.id, text: job.text, voiceId: VOICE_CAST[job.s.id]?.voiceId }), signal: job.abort.signal });
+      const response = await fetch(PREMIUM_RELAY + "/tickets", { method: "POST", headers: { "content-type": "application/json", "x-malimar-voice-session": premiumVoiceSession, ...(choice.sampleSession ? { "x-malimar-sample-session": choice.sampleSession } : {}) }, body: JSON.stringify({ seatId: job.s.id, text: job.text, voiceId: choice.voiceId }), signal: job.abort.signal });
       if (!response.ok) throw new Error("Voice ticket unavailable");
       const data = await response.json();
-      if (!/^[a-f0-9]{48}$/.test(data.ticket) || data.voiceId !== VOICE_CAST[job.s.id]?.voiceId) throw new Error("Invalid voice ticket");
+      if (!/^[a-f0-9]{48}$/.test(data.ticket) || data.voiceId !== choice.voiceId) throw new Error("Invalid voice ticket");
       if (epoch !== speechEpoch || stopped || !voiceOn || !premiumVoiceSession) return;
       job.audio = new Audio(PREMIUM_RELAY + "/stream/" + data.ticket);
       job.audio.onended = done;
       job.audio.onerror = () => premiumSpeechFailed(job, done, epoch);
-      job.audio.onplaying = () => { job.started = true; renderVoiceEngine("elevenlabs", VOICE_CAST[job.s.id]?.name || ""); if (speechGuidanceActive) job.audio.pause(); };
+      job.audio.onplaying = () => { job.started = true; renderVoiceEngine("elevenlabs", choice.name); if (speechGuidanceActive) job.audio.pause(); };
       if (!speechGuidanceActive) await job.audio.play();
     } catch { premiumSpeechFailed(job, done, epoch); }
   }
@@ -1114,12 +1231,13 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
     const chair = seat("president");
     if (!chair) return;
     cancelSpeech(); stopped = false; voiceOn = true; renderVoice(); setBusy(true);
-    const text = "Welcome to Malimar Ballroom. This is the ElevenLabs voice assigned to the fictional chair.";
+    const text = uploadedVoice?.active ? "Welcome to Malimar Ballroom. This is your selected session voice narrating a fictional AI panel." : "Welcome to Malimar Ballroom. This is the ElevenLabs voice assigned to the fictional chair.";
     try { say(chair, text); await drained(text.length); }
     finally { setBusy(false); }
   }
   function premiumSpeechFailed(job, done, epoch) {
     if (epoch !== speechEpoch || currentSpeech !== job) return;
+    void pauseUploadedVoice();
     premiumVoiceSession = "";
     renderVoiceEngine();
     $("premiumConnect").textContent = "Connect premium voices";
@@ -3377,6 +3495,17 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
   $("premiumShow").onclick = openPremiumSetup;
   $("premiumClose").onclick = () => { const panel = $("premiumWorkspace"); if (typeof panel.close === "function") panel.close(); else panel.removeAttribute("open"); };
   $("premiumConsent").onchange = () => { if (!$("premiumConsent").checked && premiumVoiceSession) void connectPremiumVoice(); };
+  $("sessionVoiceFile").onchange = chooseVoiceSample;
+  $("sessionVoiceOpen").onclick = () => { openPremiumSetup(); $("sessionVoiceFile").focus(); };
+  $("sessionVoiceCreate").onclick = () => { void createSessionVoice(); };
+  $("sessionVoiceUse").onclick = () => { void sessionVoiceAction("use"); };
+  $("sessionVoicePanel").onclick = () => { cancelSpeech(); void pauseUploadedVoice(); };
+  $("sessionVoiceCheck").onclick = () => { void sessionVoiceAction("check"); };
+  $("sessionVoiceDelete").onclick = () => { void sessionVoiceAction("delete"); };
+  $("sessionVoiceCancel").onclick = cancelSessionVoiceUpload;
+  $("sessionVoicePermission").onchange = () => { if (!$("sessionVoicePermission").checked) { cancelSpeech(); void pauseUploadedVoice(); } };
+  window.addEventListener("pagehide", endSessionVoiceVisit);
+  renderSessionVoice();
 
   function renderVoice() {
     const b = $("voice");
