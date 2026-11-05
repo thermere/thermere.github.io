@@ -116,6 +116,8 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 #dispatchEditor section { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,220px),1fr)); gap: 8px; }
 #dispatchEditor h3, #dispatchEditor button { grid-column: 1 / -1; }
 #dispatchOutput p { white-space: pre-wrap; }
+#gameStudio label { display: grid; gap: 5px; min-width: 0; margin-block: 8px; }
+#gameStudio input, #gameStudio select { width: 100%; min-width: 0; padding: 7px; background: var(--bg); color: var(--ink); border: 1px solid var(--rule); }
 
 .desk { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--surface); border: 1px solid var(--rule); border-radius: 2px; }
 .desk-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 9px 14px; border-bottom: 1px solid var(--rule); }
@@ -234,6 +236,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
       <button class="tool" id="memoryOpen" type="button">Memory</button>
       <button class="tool" id="agentsOpen" type="button" aria-controls="agentWorkspace">Agent connections</button>
       <button class="tool" id="dispatchOpen" type="button" aria-controls="dispatchWorkspace">Warehouse dispatch</button>
+      <button class="tool" id="gameOpen" type="button" aria-controls="gameStudio">Game Studio</button>
       <button class="tool" id="premiumShow" type="button">ElevenLabs setup</button>
       <button class="tool" id="voiceEngine" type="button" aria-controls="premiumWorkspace">Device voices</button>
       <label class="pace" for="pace">Pace
@@ -250,7 +253,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
   <main class="room">
     <section class="bench" aria-label="The seats">
       <div class="bench-head">
-        <span class="label" id="seatCount">73 of 73 in session</span>
+        <span class="label" id="seatCount">74 of 74 in session</span>
         <span class="key"><span><i class="chair"></i>Chair</span><span><i class="legal"></i>Legal</span><span><i class="fin"></i>Financial</span><span><i class="civic"></i>Civic</span></span>
       </div>
       <label class="seat-filter" for="seatFilter">Browse A–Z
@@ -268,6 +271,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
           <option value="health-education">Health and education</option>
           <option value="livelihoods">Livelihoods</option>
           <option value="science-tech">Science and technology</option>
+          <option value="entertainment">Entertainment and games</option>
           <option value="infrastructure">Infrastructure</option>
           <option value="global">Global accountability</option>
           <option value="humanities">History and humanities</option>
@@ -386,6 +390,18 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
         <div class="nav-actions"><button class="tool" id="memorySave" type="button">Save note</button><button class="tool" id="memoryNew" type="button">New note</button><button class="tool" id="memoryExport" type="button">Export memory</button></div>
         <p class="fine" id="memoryStatus" role="status">No automatic learning from AI answers. Review a response before keeping it.</p>
         <div id="memoryList" class="ops-output"></div>
+      </details>
+      <details class="operations" id="gameStudio">
+        <summary>Game Studio · entertainment, design and playable prototypes</summary>
+        <p class="fine">Talk with the Game Design Specialist about game mechanics, fair competitive play, levels, engines, audio and production scope. Build a small playable matching game here now, or turn a larger idea into a design brief. This first builder uses a reviewed template; arbitrary AI-generated games and native app builds are future work.</p>
+        <label>Game title<input id="gameTitle" maxlength="80" placeholder="Your game title"></label>
+        <label>Your larger game idea<textarea id="gameIdea" maxlength="1600" placeholder="Describe the player, the goal, the challenge and what should feel fun."></textarea></label>
+        <label>Target platform<select id="gamePlatform"><option value="browser">Browser</option><option value="mobile">Phone / tablet</option><option value="desktop">Desktop</option><option value="console">Console concept</option></select></label>
+        <label>Matching prototype size<select id="gamePairs"><option value="4">4 pairs · 8 cards</option><option value="6">6 pairs · 12 cards</option><option value="8" selected>8 pairs · 16 cards</option><option value="12">12 pairs · 24 cards</option></select></label>
+        <label>Prototype theme<select id="gameTheme"><option value="gold">Ballroom gold</option><option value="neon">Neon arcade</option><option value="ocean">Ocean blue</option></select></label>
+        <div class="nav-actions"><button class="tool" id="gameBuild" type="button">Build matching prototype</button><button class="tool" id="gameExport" type="button">Export playable HTML</button><button class="tool" id="gameBrief" type="button">Create design brief</button><button class="tool" id="gameAsk" type="button">Ask Game Design Specialist</button></div>
+        <p class="fine" id="gameStatus" role="status">The local matching prototype needs no AI account or premium voice credits. Ask specialist sends your idea to Ballroom's existing live AI provider.</p>
+        <div id="gamePreview" aria-label="Playable game preview"></div>
       </details>
       <details class="operations" id="dispatchWorkspace">
         <summary>Warehouse dispatch desk · plan, assign and handle exceptions</summary>
@@ -596,9 +612,11 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
     { id: "history", name: "History Specialist", side: "civic", domain: "humanities", pitch: .94, rate: .96, brief: "A fictional historical-research lens. Asks which period, place and question apply, separates primary evidence from later interpretation, and tests chronology, provenance, translation and missing accounts. Explains competing interpretations without treating every factual claim as equally supported. Never invents dates, quotations, archives or citations, claims an unperformed search, or speaks for an entire culture." },
     { id: "it", name: "IT Systems Professional", side: "civic", domain: "science-tech", pitch: 1, rate: 1, brief: "A fictional IT systems professional for computers, networks, Wi-Fi, identity, cloud services, backups and business software. Check symptoms, versions and recent changes; explain a reversible diagnostic step, expected result and rollback. Never request passwords or keys, claim unperformed access or repairs, or recommend destructive changes without a verified backup and explicit approval." },
     { id: "supply-chain", name: "Supply Chain Manager", side: "civic", domain: "transport", pitch: 1.03, rate: 1, brief: "A fictional supply-chain manager for sourcing, supplier performance, demand planning, inventory, replenishment and disruption recovery. Link purchasing, production, warehouses and transport; compare service, lead time, total landed cost and working capital using supplied data. State assumptions and measurable next steps. Never invent forecasts, stock levels, supplier quotes or delivery promises." },
+    { id: "game-design", name: "Game Design Specialist", side: "civic", domain: "entertainment", pitch: 1.05, rate: 1.02, brief: "A fictional game designer and developer for core loops, mechanics, levels, balance, accessibility, fair competitive practice and production scope. Turn an idea into a small prototype with controls, win/lose conditions and measurable playtests. Separate engine/platform requirements and tested performance from guesses. Use original or licensed assets. Never claim unperformed play, builds, benchmarks, current patch verification or platform approval. Never enable cheating or account theft or promise commercial success." },
   ];
 
-  const VOICE_CAST = {"president":{"name":"Brian","voiceId":"ByWUwXA3MMLREYmxtB32"},
+  const VOICE_CAST = {
+    "president":{"name":"Brian","voiceId":"ByWUwXA3MMLREYmxtB32"},
     "judge":{"name":"Verity X","voiceId":"1hlpeD1ydbI2ow0Tt3EW"},
     "lawyer":{"name":"Amara","voiceId":"GEcKlrQ1MWkJKoc7UTJd"},
     "prosecutor":{"name":"Adam — Distinct","voiceId":"bfGb7JTLUnZebZRiFYyq"},
@@ -670,7 +688,9 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
     "mathematics":{"name":"Devi","voiceId":"Ghr5KCyOzBvJpcdBbJhE"},
     "history":{"name":"Wyman","voiceId":"KYpkPJwl1dpLc9QpMwnO"},
     "it":{"name":"Josh — Teacher for Kids","voiceId":"nzFihrBIvB34imQBuxub"},
-    "supply-chain":{"name":"Elara — Crisp Pro Narrator","voiceId":"WQP7cQUF5aAS6Axh5yaa"}};
+    "supply-chain":{"name":"Elara — Crisp Pro Narrator","voiceId":"WQP7cQUF5aAS6Axh5yaa"},
+    "game-design":{"name":"Warren — Effortless and Cool","voiceId":"7QN34D2r3hCNwbOYIeK0"}
+  };
 
   const OPERATIONS_STAGES = ["receiving", "inspection", "putaway", "inventory", "replenishment", "picking", "packing", "dispatch", "returns"];
 
@@ -848,7 +868,8 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
       { seat: "logistics", clarification: true, text: "I cannot support that promised increase from the facts supplied. I should have proposed a limited trial, with a measured baseline and review of travel paths, congestion and safe work practices. Compare like-for-like conditions and keep the existing process available until the trial meets agreed criteria." },
       { seat: "worker", text: "The trial also needs input from the people doing the tasks and a clear way to stop it if the new paths create unsafe interactions or extra strain. A faster count alone would not establish a better operation. Record the effects on quality and working conditions as well." },
       { seat: "president", text: "The claim of doubled throughput has been withdrawn as unsupported. The useful next step is a bounded trial with a baseline, defined measures and safety review. The panel's agreement does not verify a result; the actual observations and qualified site review must do that." }
-    ] }
+    ] },
+    {"title":"A small game prototype","lines":[{"seat":null,"text":"Can we turn an original game idea into something playable?"},{"seat":"game-design","text":"Start with one core loop: reveal two cards and find a pair. Eight pairs require sixteen cards, with eight successful matching turns at minimum. Keep it untimed, show the move count and test whether the rules are understandable. This is a small matching-game template, not evidence that a larger game has been built or tested."},{"seat":"audio","text":"The first prototype can stay silent. Later, test short user-triggered cues at a comfortable level, with a mute option and a visual equivalent for each cue. Use original or licensed sounds; a voice or soundtrack does not make the mechanics work."},{"seat":"it","text":"Export a self-contained browser prototype and test keyboard, touch and offline play. Keep account credentials and untrusted generated code outside the game. Native phone, multiplayer and console releases each need their own implementation and testing."},{"seat":"president","text":"The next deliverable is a small, original prototype and a short playtest. Separate what runs locally today from ideas for native apps, larger worlds and multiplayer. Test the core loop before expanding scope."}]}
   ].map(s => ({ ...s, lines: s.lines.map(e => ({ ...e, example: true })) }));
   let sceneIdx = 0;
   const example = () => SCENES[sceneIdx].lines.slice();
@@ -904,6 +925,7 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
       if (query && !(s.name + " " + s.brief + " " + s.id + " " + (s.domain || "")).toLowerCase().includes(query)) return;
       if (filter === "political" || filter === "lived") { if (s.perspective !== filter) return; }
       else if (["legal", "fin", "civic"].includes(filter)) { if (s.side !== filter && !(filter === "legal" && s.side === "chair")) return; }
+      else if (filter === "entertainment") { if (!["game-design", "audio"].includes(s.id)) return; }
       else if (filter !== "all" && s.domain !== filter) return;
       const el = document.createElement("div");
       el.className = "seat";
@@ -1611,7 +1633,8 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
     return /\b(?:34[- ]hour|hours? of service|\bhos\b|eld|duty cycle|reset)\b/i.test(previous) && (/\b(?:class a|driver|dispatcher|cargo|given any|stepping up|i forgot|he didn.t|she didn.t|nobody|volunteer)\b/i.test(question) || /^(?:yes|no|right|correct)[.! ]*$/i.test(question.trim()));
   }
   function subjectSpecialist(question, previous = "") {
-    const topics = [[/\b(?:math(?:s|ematical|ematics)?|equations?|algebra|calculus|geometry|trigonometry)\b/i, "mathematics"], [/\b(?:audio|microphone|mixing|mastering|acoustics|sound engineering)\b/i, "audio"], [/\b(?:history|historical|ancient)\b/i, "history"], [/\b(?:physics|chemistry|biology|scientific|science)\b/i, "scientist"], [/\b(?:it (?:support|systems?|professional|department|infrastructure)|information technology|help[- ]?desk|sysadmin|computers?|laptops?|workstations?|wi[- ]?fi|dns|dhcp|vpn|active directory|microsoft 365|google workspace|data backups?|backup restor(?:e|ation)|cloud (?:migration|infrastructure|services)|network (?:outage|troubleshooting|configuration)|server (?:outage|crash|configuration)|printer(?:s| setup| problem)?)\b/i, "it"], [/\b(?:supply[- ]chain|procurement|demand (?:planning|forecast(?:s|ing)?)|inventory planning|safety stock|reorder points?|stock[- ]?outs?|supplier (?:selection|performance|lead times?|risk)|sourcing strategy|sales and operations planning|s&op|materials? requirements? planning)\b/i, "supply-chain"]];
+    if (/\b(?:build|create|design|make|develop) (?:a |an |my |our |the |small |new |simple )*game\b/i.test(question)) return "game-design";
+    const topics = [[/\b(?:video[- ]?games?|game (?:design|development|developer|mechanics|balance|loops?|engines?)|level design|godot|unreal engine|unity (?:engine|game)|esports|fortnite|minecraft|roblox|valorant)\b/i, "game-design"], [/\b(?:math(?:s|ematical|ematics)?|equations?|algebra|calculus|geometry|trigonometry)\b/i, "mathematics"], [/\b(?:audio|microphone|mixing|mastering|acoustics|sound engineering)\b/i, "audio"], [/\b(?:history|historical|ancient)\b/i, "history"], [/\b(?:physics|chemistry|biology|scientific|science)\b/i, "scientist"], [/\b(?:it (?:support|systems?|professional|department|infrastructure)|information technology|help[- ]?desk|sysadmin|computers?|laptops?|workstations?|wi[- ]?fi|dns|dhcp|vpn|active directory|microsoft 365|google workspace|data backups?|backup restor(?:e|ation)|cloud (?:migration|infrastructure|services)|network (?:outage|troubleshooting|configuration)|server (?:outage|crash|configuration)|printer(?:s| setup| problem)?)\b/i, "it"], [/\b(?:supply[- ]chain|procurement|demand (?:planning|forecast(?:s|ing)?)|inventory planning|safety stock|reorder points?|stock[- ]?outs?|supplier (?:selection|performance|lead times?|risk)|sourcing strategy|sales and operations planning|s&op|materials? requirements? planning)\b/i, "supply-chain"]];
     for (const [re, id] of topics) if (re.test(question)) return id;
     if (/^(?:(?:a|the|any|another|one|please|just|yes|no|pick|choose|show|me|do|work|through|random|massive|big|large|one|go|ahead|more|mathematical)[\s,.!?]*)+$/i.test(question.trim())) {
       // Only the newest substantive visitor topic can carry into a short reply.
@@ -2752,6 +2775,53 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
     try { rec.start(); navListening = true; $("navVoice").textContent = "Voice controls listening"; $("navVoice").setAttribute("aria-pressed", "true"); navigationMessage("Listening for commands prefixed with Ballroom. Say Ballroom, stop listening to finish."); }
     catch { stoppedListening(); navigationMessage("Voice input could not start. Another speech input may still be closing; try again."); }
   }
+  function gameStudioConfig(value) {
+    return { title: (typeof value.title === "string" ? value.title.trim().slice(0, 80) : "") || "Ballroom Match", pairs: [4, 6, 8, 12].includes(Number(value.pairs)) ? Number(value.pairs) : 8, theme: ["gold", "neon", "ocean"].includes(value.theme) ? value.theme : "gold" };
+  }
+  // Self-contained reviewed game code; exports never evaluate an AI's code.
+  function memoryGameFactory(root, config, random = Math.random) {
+    const pairs = [4, 6, 8, 12].includes(config.pairs) ? config.pairs : 8;
+    const theme = ["gold", "neon", "ocean"].includes(config.theme) ? config.theme : "gold";
+    const values = Array.from({ length: pairs * 2 }, (_, i) => i % pairs + 1);
+    for (let i = values.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [values[i], values[j]] = [values[j], values[i]]; }
+    root.textContent = ""; root.className = "malimar-pair-game"; root.dataset.theme = theme;
+    const make = (tag, text = "") => { const element = document.createElement(tag); element.textContent = text; return element; };
+    const style = make("style", ".malimar-pair-game{--game-accent:#efcc77;--game-bg:#171915;--game-ink:#fff8e7;background:var(--game-bg);color:var(--game-ink);padding:18px;border-radius:12px;margin-block:12px;font:16px/1.5 system-ui,sans-serif}.malimar-pair-game[data-theme=neon]{--game-accent:#c3b5ff;--game-bg:#18112b;--game-ink:#faf7ff}.malimar-pair-game[data-theme=ocean]{--game-accent:#91dcf4;--game-bg:#0d2330;--game-ink:#f3fcff}.malimar-pair-game h2{font-size:24px;margin:0 0 10px;overflow-wrap:anywhere}.malimar-pair-game .pair-board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.malimar-pair-game button{font:inherit;min-height:52px;border:2px solid var(--game-accent);border-radius:8px;background:transparent;color:var(--game-ink);cursor:pointer}.malimar-pair-game button:focus-visible{outline:3px solid white;outline-offset:3px}.malimar-pair-game button:disabled{background:var(--game-accent);color:#10212b;opacity:1;cursor:default}.malimar-pair-game .pair-restart{padding:8px 14px;margin-top:12px}.malimar-pair-game p{white-space:pre-wrap}");
+    const heading = make("h2", String(config.title || "Ballroom Match").slice(0, 80));
+    const instructions = make("p", "Match every pair. Choose two hidden cards. A mismatch stays visible until your next choice. Untimed: use touch, mouse, or Tab and Enter / Space.");
+    const board = make("div"), status = make("p", "0 moves · 0 of " + pairs + " pairs matched."); board.className = "pair-board"; board.setAttribute("role", "group"); board.setAttribute("aria-label", "Matching game cards"); status.setAttribute("role", "status");
+    let chosen = [], matched = new Set(), moves = 0;
+    const buttons = values.map((value, index) => {
+      const button = make("button", "?"); button.type = "button";
+      button.setAttribute("aria-label", "Hidden card " + (index + 1)); button.onclick = () => select(index); board.append(button); return button;
+    });
+    function show(index, visible) { const button = buttons[index]; button.textContent = visible ? String(values[index]) : "?"; button.setAttribute("aria-label", (matched.has(index) ? "Matched" : visible ? "Revealed" : "Hidden") + " card " + (index + 1) + (visible ? ", value " + values[index] : "")); button.disabled = matched.has(index); }
+    function select(index) {
+      if (!Number.isInteger(index) || index < 0 || index >= values.length || matched.has(index)) return;
+      if (chosen.length === 2) { chosen.forEach(i => show(i, false)); chosen = []; }
+      if (chosen.includes(index)) return;
+      chosen.push(index); show(index, true);
+      if (chosen.length !== 2) { status.textContent = moves + " moves · choose a second card."; return; }
+      moves++;
+      if (values[chosen[0]] === values[chosen[1]]) { chosen.forEach(i => matched.add(i)); chosen.forEach(i => show(i, true)); chosen = []; status.textContent = matched.size === values.length ? "You matched all " + pairs + " pairs in " + moves + " moves!" : "Pair found! " + moves + " moves · " + matched.size / 2 + " of " + pairs + " pairs matched."; }
+      else status.textContent = "Different values: " + values[chosen[0]] + " and " + values[chosen[1]] + ". " + moves + " moves. Choose a card to begin your next turn.";
+    }
+    const restart = make("button", "Shuffle and restart"); restart.type = "button"; restart.className = "pair-restart"; restart.onclick = () => memoryGameFactory(root, config, random);
+    root.append(style, heading, instructions, board, status, restart);
+    return { select, state: () => ({ values: values.slice(), chosen: chosen.slice(), matched: Array.from(matched), moves, won: matched.size === values.length }) };
+  }
+  function gamePrototypeHTML(value) {
+    const config = gameStudioConfig(value), data = JSON.stringify(config).replace(/[<>&\u2028\u2029]/g, c => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
+    return "<!--\nMIT License\n\nCopyright (c) 2026 Thermere LLC and contributors\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n-->\n" + '<!doctype html>\n<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'unsafe-inline\'; style-src \'unsafe-inline\'; base-uri \'none\'; form-action \'none\'"><title>Malimar game prototype</title><style>body{margin:0;padding:16px;background:#101410}main{max-width:680px;margin:auto}p{overflow-wrap:anywhere}</style></head><body><main><div id="game"></div></main><script>(' + memoryGameFactory.toString() + ')(document.getElementById("game"),' + data + ');<' + '/script></body></html>';
+  }
+  function currentGameConfig() { return gameStudioConfig({ title: $("gameTitle").value, pairs: $("gamePairs").value, theme: $("gameTheme").value }); }
+  function createGameBrief() {
+    const config = currentGameConfig(), doc = blankDocument("general"); doc.title = config.title + " · game design brief";
+    doc.fields = [{ label: "Target platform", value: $("gamePlatform").value || "browser" }, { label: "Current deliverable", value: "Reviewed matching-game template; larger concepts need implementation and playtesting." }];
+    doc.sections = [{ heading: "Original concept", body: $("gameIdea").value.trim().slice(0, 1600) || "Not supplied. Define the player goal, core action, challenge and intended audience." }, { heading: "Playable prototype", body: config.pairs + " pairs, " + config.pairs * 2 + " cards, untimed matching, visible move count, keyboard and touch controls. Theme: " + config.theme + ". The larger idea is not automatically implemented by this template." }, { heading: "Professional review questions", body: "What is the core loop? What can the smallest playable version prove? Define controls, win/lose conditions, learning curve, feedback, accessibility, original/licensed assets, technical limits and playtest questions. Multiplayer, 3D, purchases, account services and native releases need separate scope, testing and platform review." }];
+    doc.missing = ["Audience, original asset plan, target device tests, production budget, measurable playtest results and any platform approvals are not established."]; return saveDocument(doc);
+  }
+
   // Deterministic warehouse dispatch: supplied work and explicit local records.
   // No AI instruction can release work or write a physical-system command.
   const DISPATCH_PROFILES = {
@@ -3291,6 +3361,11 @@ dialog h2 { margin: 0 0 12px; font: 700 24px/1.1 var(--display); }
   $("dispatchHandoff").onclick = () => { try { const report = dispatchHandoffText(); if (report.length > 12000) throw new Error("This shift exceeds the handoff document limit. Export the full shift JSON; no work orders were omitted silently."); const doc = blankDocument("logistics"); doc.title = "Warehouse dispatch shift handoff"; doc.sections = (report.match(/[\s\S]{1,1500}/g) || []).map((body, i) => ({ heading: "Handoff · part " + (i + 1), body })); saveDocument(doc); $("dispatchStatus").textContent = "Handoff draft created locally. Review reported status and missing facts before sharing."; } catch (error) { $("dispatchStatus").textContent = error.message; } };
   $("dispatchDiscuss").onclick = () => { if (!$("dispatchShare").checked) { $("dispatchStatus").textContent = "Choose whether to share the shift summary before asking the panel to review it."; return; } const report = dispatchHandoffText(); if (report.length > 7000) { $("dispatchStatus").textContent = "This shift exceeds the live review limit. Create a smaller supplied shift or select a handoff excerpt in Documents; no automatic partial review was sent."; return; } setMode("floor"); submitQuestion("Review this supplied warehouse dispatch handoff. Identify bottlenecks, missing facts and the next practical step. Do not claim to have assigned real people or cleared physical safety checks.\n<supplied_dispatch_handoff>\n" + promptText(report, 7000) + "\n</supplied_dispatch_handoff>"); };
   renderDispatchEditor(); renderDispatchOutput();
+  $("gameOpen").onclick = () => { $("gameStudio").open = true; $("gameTitle").focus(); };
+  $("gameBuild").onclick = () => { memoryGameFactory($("gamePreview"), currentGameConfig()); $("gameStatus").textContent = "Playable matching prototype built locally. This implements the matching template; your larger concept remains a separate design brief."; };
+  $("gameExport").onclick = () => { downloadLocal("malimar-matching-game.html", gamePrototypeHTML(currentGameConfig()), "text/html"); $("gameStatus").textContent = "Playable HTML exported. It uses the reviewed matching template and needs no API, account, external assets or network connection."; };
+  $("gameBrief").onclick = () => { try { createGameBrief(); $("gameStatus").textContent = "Game design brief saved in Documents for review. No game idea was sent to AI."; } catch (error) { $("gameStatus").textContent = error.message; } };
+  $("gameAsk").onclick = () => { submitQuestion("Game design: help turn this original concept into a scoped, testable prototype. Title: " + currentGameConfig().title + ". Target platform: " + ($("gamePlatform").value || "browser") + ". Idea: " + ($("gameIdea").value.trim().slice(0, 1600) || "Help me define one clear core loop and the smallest useful playtest.")); };
   $("chipClear").onclick = () => { addressed = null; renderSeats(); renderChip(); };
   $("pace").value = store.get("pace", "quick");
   $("pace").onchange = () => store.set("pace", $("pace").value);
