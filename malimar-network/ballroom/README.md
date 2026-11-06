@@ -5,3 +5,5 @@ Verbatim upstream release a12de4f63e409b65970be75ec0ac895f237f11ff (maintainer-a
 IT uses the maintainer-selected Josh voice. Premium relay version 2 verifies voice identity before paid generation; an existing version 1 private relay needs a one-time update/relaunch. New answers still require ElevenLabs generation.
 
 Theater front screen: upstream release 6bdb586ef9876d50520d9c4e171c76b2f92e74a7, published November 6, 2026, America/Los_Angeles. Serve Malimar-Ballroom-Stage-Welcome.mp3 beside index.html.
+
+This copy forwards visitors to https://malimarballroom.com/ when served from thermere.github.io. The file stays here because the Workshop reads it as its starting source.
